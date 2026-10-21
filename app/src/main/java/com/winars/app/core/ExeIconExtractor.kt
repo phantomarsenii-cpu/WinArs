@@ -44,7 +44,7 @@ object ExeIconExtractor {
         null
     }
 
-    /** SAF image/* -> files/icons_custom/<key>.png */
+    /** SAF: выбранное изображение -> files/icons_custom/KEY.png */
     fun saveCustomIcon(ctx: Context, key: String, uri: Uri): File? {
         val bmp = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) } ?: return null
         val scaled = if (maxOf(bmp.width, bmp.height) > 512) {
