@@ -24,11 +24,11 @@ jobs:
       - name: Patch core paths (com.winlator -> com.winars.app)
         run: python3 tools/patch_assets.py app/src/main/assets app/src/main/jniLibs
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: SDK 35, build-tools, NDK 24.0.8215888, CMake 3.22.1
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;24.0.8215888" "cmake;3.22.1"
+      - name: Android SDK packages (SDK 35, build-tools, NDK 24, CMake 3.22.1)
+        run: |
+          SDKM=$(ls $ANDROID_HOME/cmdline-tools/*/bin/sdkmanager | head -1)
+          yes | $SDKM --licenses > /dev/null || true
+          $SDKM "platforms;android-35" "build-tools;35.0.0" "ndk;24.0.8215888" "cmake;3.22.1"
 
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v3
