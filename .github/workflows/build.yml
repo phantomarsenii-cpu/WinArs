@@ -1,0 +1,53 @@
+name: Build WinArs APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: zstd
+        run: sudo apt-get update -y && sudo apt-get install -y zstd
+
+      # Бинарники ядра собраны под /data/data/com.winlator/files/rootfs.
+      # Заменяем на com.winars.app/files/root (та же длина) в rootfs.tzst, box64, драйверах и jniLibs.
+      - name: Patch core paths (com.winlator -> com.winars.app)
+        run: python3 tools/patch_assets.py app/src/main/assets app/src/main/jniLibs
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: SDK 35, build-tools, NDK 24.0.8215888, CMake 3.22.1
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;24.0.8215888" "cmake;3.22.1"
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.9'
+
+      - name: assembleDebug (Kotlin + Java + CMake: libwinlator, vortek, gladio, virgl, midihandler, adrenotools)
+        run: gradle assembleDebug --stacktrace
+
+      - name: Check native libs in APK
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          unzip -l "$APK" | grep -E "lib/arm64-v8a/lib(winlator|vortekrenderer|gladiorenderer|virglrenderer|midihandler|adrenotools)" || (echo "native libs missing" && exit 1)
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinArs-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
