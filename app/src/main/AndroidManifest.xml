@@ -47,36 +47,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Winlator: установка системы, контейнеры, настройки -->
-        <activity
-            android:name="com.winlator.MainActivity"
-            android:theme="@style/AppThemeDark"
-            android:exported="false"
-            android:screenOrientation="sensor"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation" />
-
-        <!-- Winlator: экран X-сервера, где работает Wine -->
-        <activity
-            android:name="com.winlator.XServerDisplayActivity"
-            android:exported="false"
-            android:theme="@style/AppThemeFullscreenDark"
-            android:supportsPictureInPicture="true"
-            android:launchMode="singleTask"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation"
-            android:screenOrientation="sensorLandscape" />
-
-        <activity
-            android:name="com.winlator.ControlsEditorActivity"
-            android:exported="false"
-            android:theme="@style/AppThemeFullscreenDark"
-            android:screenOrientation="sensorLandscape" />
-
-        <activity
-            android:name="com.winlator.ExternalControllerBindingsActivity"
-            android:theme="@style/AppThemeDark"
-            android:exported="false"
-            android:screenOrientation="sensor" />
-
         <service
             android:name="com.winlator.services.ForegroundService"
             android:enabled="true"
@@ -86,7 +56,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.winars.app.FileProvider"
+            android:authorities="com.winars.app.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

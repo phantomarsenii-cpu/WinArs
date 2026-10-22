@@ -1,6 +1,6 @@
 package com.winlator.xserver;
 
-import com.winlator.XServerDisplayActivity;
+import com.winlator.WineSession;
 import com.winlator.contentdialog.DebugDialog;
 import com.winlator.core.CursorLocker;
 import com.winlator.renderer.GLRenderer;
@@ -26,7 +26,7 @@ public class XServer {
     public static final short VERSION = 11;
     public static final String VENDOR_NAME = "Elbrus Technologies, LLC";
     public static final Charset LATIN1_CHARSET = Charset.forName("latin1");
-    public final XServerDisplayActivity activity;
+    public final WineSession activity;
     private final Extension[] extensions;
     public final ScreenInfo screenInfo;
     public final PixmapManager pixmapManager;
@@ -47,7 +47,7 @@ public class XServer {
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
     private boolean relativeMouseMovement = false;
 
-    public XServer(XServerDisplayActivity activity, ScreenInfo screenInfo) {
+    public XServer(WineSession activity, ScreenInfo screenInfo) {
         this.activity = activity;
         this.screenInfo = screenInfo;
         cursorLocker = ENABLE_CURSOR_LOCKER ? new CursorLocker(this) : null;

@@ -3,7 +3,7 @@ package com.winlator.winhandler;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
-import com.winlator.XServerDisplayActivity;
+import com.winlator.WineSession;
 import com.winlator.core.Callback;
 import com.winlator.core.DefaultVersion;
 import com.winlator.core.FileUtils;
@@ -38,12 +38,12 @@ public class WinHandler {
     private OnGetProcessInfoListener onGetProcessInfoListener;
     private OnPreExecListener onPreExecListener;
     private InetAddress localhost;
-    protected final XServerDisplayActivity activity;
+    protected final WineSession activity;
     private MIDIHandler midiHandler;
     public final GamepadHandler gamepadHandler = new GamepadHandler(this);
     private Callback<String> requestCallback;
 
-    public WinHandler(XServerDisplayActivity activity) {
+    public WinHandler(WineSession activity) {
         this.activity = activity;
     }
 

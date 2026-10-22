@@ -134,11 +134,12 @@ fun SettingsContent() {
         Card("Ядро Wine") {
             Line("Состояние", WineBackends.current.status)
             Spacer(Modifier.height(8.dp))
-            FluentButton("Установка и контейнеры", {
-                ctx.startActivity(android.content.Intent(ctx, com.winlator.MainActivity::class.java))
-            })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FluentButton("Обновить программы", { st.importWineShortcuts(manual = true) }, primary = true)
+                if (st.wine.session != null) FluentButton("Остановить Wine", { st.wine.stop() })
+            }
             Spacer(Modifier.height(4.dp))
-            Text("Экран Winlator: установка системы, контейнеры, драйверы, DXVK, Box64.", color = Fluent.TextDim, fontSize = 11.sp)
+            Text("Ярлыки установленных программ переносятся из Wine в рабочий стол и меню Пуск WinArs.", color = Fluent.TextDim, fontSize = 11.sp)
         }
     }
 }

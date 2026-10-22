@@ -1,6 +1,6 @@
 package com.winlator.core;
 
-import com.winlator.XServerDisplayActivity;
+import com.winlator.WineSession;
 import com.winlator.container.Container;
 import com.winlator.container.DXWrappers;
 import com.winlator.winhandler.OnPreExecListener;
@@ -15,7 +15,7 @@ import java.util.Locale;
 public class Win32AppWorkarounds implements OnPreExecListener {
     private final short taskAffinityMask;
     private final short taskAffinityMaskWoW64;
-    private final XServerDisplayActivity activity;
+    private final WineSession activity;
     private SaveMemoryTask saveMemoryTask;
 
     private interface Workaround {}
@@ -52,7 +52,7 @@ public class Win32AppWorkarounds implements OnPreExecListener {
         boolean apply(String path);
     }
 
-    public Win32AppWorkarounds(XServerDisplayActivity activity) {
+    public Win32AppWorkarounds(WineSession activity) {
         this.activity = activity;
         Container container = activity.getContainer();
         taskAffinityMask = (short)ProcessHelper.getAffinityMask(container.getCPUList(true));

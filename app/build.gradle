@@ -11,10 +11,10 @@ android {
     ndkVersion '24.0.8215888'          // как в оригинальном Winlator 11.2
 
     defaultConfig {
-        applicationId "com.winars.app"
-        minSdk 26
+        applicationId = "com.winars.app"
+        minSdk = 26
         // targetSdk 28 обязателен: с 29 Android запрещает exec файлов из /data/data/.../files (box64, wine)
-        targetSdk 28
+        targetSdk = 28
         versionCode = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "1")
         versionName "1.0-core-11.2"
         ndk { abiFilters 'arm64-v8a' }

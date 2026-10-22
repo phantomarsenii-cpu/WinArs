@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storage
@@ -174,7 +175,13 @@ fun ExplorerContent() {
                             items(files, key = { it.absolutePath }) { f ->
                                 FileRow(st, f, selected == f, !narrow,
                                     onSelect = { selected = f },
-                                    onOpen = { if (f.isDirectory) go(f) else if (FileBridge.isExe(f)) st.openInstall(f) })
+                                    onOpen = {
+                                        if (f.isDirectory) go(f)
+                                        else if (FileBridge.isExe(f)) {
+                                            // exe внутри диска C: — просто запуск; снаружи (D:/Z:) — окно установки
+                                            if (f.absolutePath.startsWith(c.absolutePath)) st.runExe(f) else st.openInstall(f)
+                                        }
+                                    })
                             }
                         }
                     }
@@ -240,7 +247,10 @@ private fun FileRow(st: DesktopState, f: File, selected: Boolean, wide: Boolean,
     val menu: () -> List<MenuItem> = {
         when {
             f.isDirectory -> listOf(MenuItem("Открыть", Icons.Default.FolderOpen) { onOpen() })
-            isExe -> listOf(MenuItem("Установить", Icons.Default.Download) { st.openInstall(f) })
+            isExe -> listOf(
+                MenuItem("Запустить", Icons.Default.PlayArrow) { st.runExe(f) },
+                MenuItem("Установить", Icons.Default.Download) { st.openInstall(f) }
+            )
             else -> emptyList()
         }
     }

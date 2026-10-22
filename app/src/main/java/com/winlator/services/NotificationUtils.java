@@ -8,7 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import androidx.core.app.NotificationCompat;
 import com.winlator.R;
-import com.winlator.MainActivity;
+import com.winlator.WinlatorConstants;
 import java.lang.ref.WeakReference;
 
 public class NotificationUtils {
@@ -59,7 +59,7 @@ public class NotificationUtils {
      * Sends or updates a notification with all parameters.
      */
     public void notify(int id, String content, String title, Class<?> serviceClass, String exitAction) {
-        Notification notification = createForegroundNotification(content, title, serviceClass, exitAction, MainActivity.class);
+        Notification notification = createForegroundNotification(content, title, serviceClass, exitAction, WinlatorConstants.hostActivity());
         notificationManager.notify(id, notification);
     }
 
@@ -115,14 +115,14 @@ public class NotificationUtils {
      * Overload of createForegroundNotification() with default target activity.
      */
     public Notification createForegroundNotification(String content, String title, Class<?> serviceClass, String exitAction) {
-        return createForegroundNotification(content, title, serviceClass, exitAction, MainActivity.class);
+        return createForegroundNotification(content, title, serviceClass, exitAction, WinlatorConstants.hostActivity());
     }
 
     /**
      * Overload of createForegroundNotification() with default title and target activity.
      */
     public Notification createForegroundNotification(String content, String title) {
-        return createForegroundNotification(content, title, null, null, MainActivity.class);
+        return createForegroundNotification(content, title, null, null, WinlatorConstants.hostActivity());
     }
 
     /**

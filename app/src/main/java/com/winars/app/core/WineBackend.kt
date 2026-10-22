@@ -1,13 +1,18 @@
 package com.winars.app.core
 
 import android.content.Context
-import android.content.Intent
 import android.os.Environment
-import com.winlator.XServerDisplayActivity
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.winlator.WineSession
 import com.winlator.container.Container
 import com.winlator.container.ContainerManager
 import com.winlator.container.GraphicsDrivers
-import com.winlator.xenvironment.RootFS
 import com.winlator.xenvironment.RootFSInstaller
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -16,75 +21,114 @@ import org.json.JSONObject
 import java.io.File
 import kotlin.coroutines.resume
 
-/** Интерфейс запуска Windows-программ. Реализация — [WinlatorBackend] (Box64 + Wine из Winlator 11.2). */
+/** Запуск Windows-программ. Реализация — [WinlatorBackend]: Winlator здесь только невидимое ядро. */
 interface WineBackend {
     val available: Boolean
     val status: String
 
-    /** Аналог `wine start /unix <exe>` в контейнере Winlator. */
+    /** Аналог `wine start /unix <exe>` в контейнере. */
     suspend fun launch(exe: File, asAdmin: Boolean): Result<Unit>
 }
 
 object WineBackends {
-    lateinit var current: WineBackend
-        private set
+    private var backend: WinlatorBackend? = null
+
+    val current: WinlatorBackend
+        get() = backend ?: error("WineBackends.init не вызван")
 
     fun init(ctx: Context) {
-        if (!::current.isInitialized) current = WinlatorBackend(ctx.applicationContext)
+        if (backend == null) backend = WinlatorBackend(ctx.applicationContext)
     }
 }
 
 /**
- * Запуск идёт тем же путём, что и в самом Winlator: XServerDisplayActivity получает
- * container_id + exec_path, поднимает XServer, Box64, Wine, PulseAudio и Vortek/Gladio/Turnip/VirGL,
- * после чего Wine запускает exe. Пока Wine работает, на экране окно X-сервера Winlator.
+ * Ядро Winlator без интерфейса: RootFSInstaller распаковывает систему, ContainerManager создаёт контейнер,
+ * WineSession поднимает XServer + Box64 + Wine и отдаёт X-экран как обычный View в окно WinArs.
+ * Intent в какую-либо Activity Winlator не используется.
  */
 class WinlatorBackend(private val app: Context) : WineBackend {
+    private val ui = Handler(Looper.getMainLooper())
 
-    private fun rootReady(): Boolean {
-        val rfs = RootFS.find(app)
-        return rfs.isValid && rfs.version >= RootFSInstaller.LATEST_VERSION
-    }
+    /** 0..100 во время распаковки rootfs, иначе -1 */
+    var installProgress by mutableIntStateOf(-1)
+        private set
+    var session by mutableStateOf<WineSession?>(null)
+        private set
+    val xWindows = mutableStateListOf<WineSession.WindowInfo>()
+    var sessionReady by mutableStateOf(false)
+        private set
 
-    override val available: Boolean get() = rootReady()
+    var onSessionReady: () -> Unit = {}
+    var onSessionExit: () -> Unit = {}
+    var onError: (String) -> Unit = {}
+
+    override val available: Boolean get() = RootFSInstaller.isInstalled(app)
 
     override val status: String
-        get() = if (!rootReady()) {
-            "Система Wine ещё не установлена (установится при первом запуске .exe)"
-        } else {
-            val n = ContainerManager(app).containers.size
-            "Wine + Box64 готовы · контейнеров: $n"
+        get() = when {
+            installProgress >= 0 -> "Установка системы Wine: $installProgress%"
+            !available -> "Система Wine установится при первом запуске .exe"
+            session != null -> "Wine запущен · окон: ${xWindows.size}"
+            else -> "Wine + Box64 готовы · контейнеров: ${ContainerManager(app).containers.size}"
         }
 
     override suspend fun launch(exe: File, asAdmin: Boolean): Result<Unit> = withContext(Dispatchers.Main) {
         if (!exe.exists()) return@withContext Result.failure(IllegalStateException("Файл не найден: ${exe.name}"))
+        if (installProgress >= 0) return@withContext Result.failure(IllegalStateException("Идёт установка системы Wine"))
 
-        if (!rootReady()) {
-            // первичная установка rootfs.tzst/box64 — штатный экран Winlator с прогрессом
-            app.startActivity(Intent(app, com.winlator.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            return@withContext Result.failure(
-                IllegalStateException("Устанавливаю систему Wine. Дождись конца установки и запусти программу снова")
-            )
+        // 1. rootfs
+        if (!RootFSInstaller.isInstalled(app) && !installRootFs()) {
+            return@withContext Result.failure(IllegalStateException("Не удалось установить систему Wine"))
         }
 
+        // 2. контейнер
         val manager = ContainerManager(app)
         val container = manager.containers.firstOrNull() ?: createDefaultContainer(manager)
             ?: return@withContext Result.failure(IllegalStateException("Не удалось создать контейнер Wine"))
-
         ensureDrive(container, exe)
 
-        app.startActivity(
-            Intent(app, XServerDisplayActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra("container_id", container.id)
-                .putExtra("exec_path", exe.absolutePath)
-        )
+        // 3. Wine уже работает -> запускаем программу внутри него
+        session?.let {
+            it.runProgram(exe.absolutePath)
+            return@withContext Result.success(Unit)
+        }
+
+        // 4. новая сессия: XEnvironment + Wine без Activity
+        val s = WineSession(app)
+        session = s
+        sessionReady = false
+        s.start(container, exe.absolutePath, object : WineSession.Listener {
+            override fun onReady() { sessionReady = true; refreshWindows(); onSessionReady() }
+            override fun onWindowsChanged() { refreshWindows() }
+            override fun onExit() { session = null; sessionReady = false; xWindows.clear(); onSessionExit() }
+            override fun onError(message: String) { this@WinlatorBackend.onError(message) }
+        })
         Result.success(Unit)
+    }
+
+    fun refreshWindows() {
+        val s = session ?: return
+        val list = s.activeWindows
+        xWindows.clear()
+        xWindows.addAll(list)
+    }
+
+    fun stop() { session?.stop() }
+
+    private suspend fun installRootFs(): Boolean = suspendCancellableCoroutine { cont ->
+        installProgress = 0
+        RootFSInstaller.install(app, object : RootFSInstaller.Listener {
+            override fun onProgress(percent: Int) { installProgress = percent }
+            override fun onFinished(success: Boolean) {
+                ui.post { installProgress = -1; if (cont.isActive) cont.resume(success) }
+            }
+        })
     }
 
     /** Контейнер по умолчанию: драйвер по GPU (Adreno -> Turnip, иначе Vortek), D: = Download, F: = вся память. */
     private suspend fun createDefaultContainer(manager: ContainerManager): Container? =
         suspendCancellableCoroutine { cont ->
+            @Suppress("DEPRECATION")
             val data = JSONObject()
                 .put("name", "WinArs")
                 .put("graphicsDriver", GraphicsDrivers.getDefaultDriver(app))
@@ -92,7 +136,8 @@ class WinlatorBackend(private val app: Context) : WineBackend {
             manager.createContainerAsync(data) { container -> if (cont.isActive) cont.resume(container) }
         }
 
-    /** Если exe лежит вне подключённых дисков контейнера — добавляем диск с буквой под нужную папку. */
+    /** Если exe лежит вне подключённых дисков контейнера — добавляем диск под нужную папку. */
+    @Suppress("DEPRECATION")
     private fun ensureDrive(container: Container, exe: File) {
         val path = exe.absolutePath
         if (path.contains("/.wine/drive_c")) return

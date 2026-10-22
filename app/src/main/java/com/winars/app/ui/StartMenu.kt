@@ -148,13 +148,23 @@ private fun StartPanel(st: DesktopState) {
                         if (recent.isEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 Text(
-                                    "Здесь появятся установленные программы. Открой Проводник и нажми «Установить» на .exe.",
+                                    "Установи программу из Проводника: её ярлык появится здесь и на рабочем столе.",
                                     color = Fluent.TextDim, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)
                                 )
                             }
                         } else {
                             items(recent, span = { GridItemSpan(maxLineSpan) }) { sc -> RecentRow(st, sc) }
                         }
+                    }
+                    val installed = st.shortcuts.filter { q.isEmpty() || it.name.lowercase().contains(q) }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { Section("Установленные программы (${installed.size})") }
+                            FluentButton("Обновить", { st.importWineShortcuts(manual = true) })
+                        }
+                    }
+                    items(installed, key = { "inst_" + it.id }) { sc ->
+                        AppTile(sc.name, { ShortcutIcon(sc, 44.dp) }) { st.launch(sc) }
                     }
                     item(span = { GridItemSpan(maxLineSpan) }) { Section("Android Apps (${shownApps.size})") }
                     items(shownApps, key = { it.pkg }) { app ->

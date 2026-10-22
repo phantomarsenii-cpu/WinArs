@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import com.winlator.core.AppUtils
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -31,6 +33,8 @@ sealed class AppWindow {
     class Settings : AppWindow() { override val title = "Параметры" }
     class Install(val exe: File) : AppWindow() { override val title = "Установка ${exe.name}" }
     class Properties(val shortcutId: String) : AppWindow() { override val title = "Свойства" }
+    /** Экран Wine: X-сервер, нарисованный внутри окна WinArs */
+    class WineScreen : AppWindow() { override val title = "Wine" }
 
     companion object { private val counter = AtomicLong(0) }
 }
@@ -47,6 +51,7 @@ class DesktopState(val app: Context) {
 
     // ---- ярлыки ----
     private val shortcutStore = ShortcutStore(app)
+    val wine: WinlatorBackend get() = WineBackends.current
     val shortcuts = mutableStateListOf<Shortcut>().apply { addAll(shortcutStore.load()) }
     var selectedId by mutableStateOf<String?>(null)
     /** растёт при смене иконок — ключ для перезагрузки картинок */
@@ -59,7 +64,22 @@ class DesktopState(val app: Context) {
         val i = shortcuts.indexOfFirst { it.id == s.id }
         if (i >= 0) { shortcuts[i] = s; shortcutStore.save(shortcuts) }
     }
-    fun removeShortcut(id: String) { shortcuts.removeAll { it.id == id }; shortcutStore.save(shortcuts) }
+    fun removeShortcut(id: String) {
+        shortcuts.firstOrNull { it.id == id }?.let { shortcutStore.dismiss(it.exePath) }
+        shortcuts.removeAll { it.id == id }
+        shortcutStore.save(shortcuts)
+    }
+
+    /** Найти ярлыки, созданные Wine-программами (.lnk), и перенести их в рабочий стол WinArs. */
+    fun importWineShortcuts(manual: Boolean = false) {
+        scope.launch {
+            val found = withContext(Dispatchers.IO) {
+                try { WineShortcutImporter.scan(app, shortcuts.toList(), shortcutStore.dismissed()) } catch (e: Throwable) { emptyList() }
+            }
+            found.forEach { addShortcut(it) }
+            if (manual) toast(if (found.isEmpty()) "Новых программ не найдено" else "Добавлено программ: ${found.size}")
+        }
+    }
     fun newShortcutId() = UUID.randomUUID().toString()
 
     // ---- окна / меню ----
@@ -71,7 +91,22 @@ class DesktopState(val app: Context) {
     fun toast(msg: String) { toast = msg }
 
     fun open(w: AppWindow) { startOpen = false; windows.add(w) }
-    fun close(w: AppWindow) { windows.remove(w) }
+    fun close(w: AppWindow) {
+        if (w is AppWindow.WineScreen) wine.stop()     // закрыли экран Wine = остановили Wine
+        windows.remove(w)
+    }
+    fun openWineScreen() {
+        startOpen = false
+        windows.removeAll { it is AppWindow.Install }
+        val e = windows.firstOrNull { it is AppWindow.WineScreen }
+        if (e != null) focus(e) else windows.add(AppWindow.WineScreen())
+    }
+    private fun onWineExit() {
+        windows.removeAll { it is AppWindow.WineScreen }
+        toast("Wine завершён. Перезапускаю систему…")
+        // как и в оригинальном Winlator: чистый перезапуск процесса, чтобы не оставлять состояние XServer/GL
+        scope.launch { delay(1200); AppUtils.restartApplication(app) }
+    }
     fun focus(w: AppWindow) {
         w.minimized = false
         if (windows.lastOrNull() !== w) { windows.remove(w); windows.add(w) }
@@ -96,6 +131,12 @@ class DesktopState(val app: Context) {
             val r = WineBackends.current.launch(File(sc.exePath), asAdmin)
             r.onFailure { toast("${sc.name}: ${it.message}") }
         }
+    }
+
+    /** Запуск .exe прямо из Проводника (например с диска C:) */
+    fun runExe(exe: File) {
+        startOpen = false
+        scope.launch { wine.launch(exe, false).onFailure { toast(it.message ?: "Не удалось запустить") } }
     }
 
     private var androidSlot = 0
@@ -151,7 +192,14 @@ class DesktopState(val app: Context) {
     var exitApp: () -> Unit = {}
     var exitDex: () -> Unit = {}
 
-    init { WineBackends.init(app); refreshBackdrop() }
+    init {
+        WineBackends.init(app)
+        wine.onSessionReady = { openWineScreen() }
+        wine.onSessionExit = { onWineExit() }
+        wine.onError = { toast(it) }
+        refreshBackdrop()
+        importWineShortcuts()
+    }
 
     companion object {
         @Volatile private var instance: DesktopState? = null

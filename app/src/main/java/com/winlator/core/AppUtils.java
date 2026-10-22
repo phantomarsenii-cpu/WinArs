@@ -35,7 +35,7 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.tabs.TabLayout;
 import com.winlator.R;
-import com.winlator.SettingsFragment;
+import com.winlator.WinlatorConstants;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -377,11 +377,11 @@ public abstract class AppUtils {
 
     public static void setActivityTheme(Activity activity) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(activity);
-        int appTheme = preferences.getInt("app_theme", SettingsFragment.APP_THEME_DARK);
-        if (appTheme == SettingsFragment.APP_THEME_LIGHT) {
+        int appTheme = preferences.getInt("app_theme", WinlatorConstants.APP_THEME_DARK);
+        if (appTheme == WinlatorConstants.APP_THEME_LIGHT) {
             activity.setTheme(R.style.AppThemeLight);
         }
-        else if (appTheme == SettingsFragment.APP_THEME_DARK) {
+        else if (appTheme == WinlatorConstants.APP_THEME_DARK) {
             activity.setTheme(R.style.AppThemeDark);
         }
     }

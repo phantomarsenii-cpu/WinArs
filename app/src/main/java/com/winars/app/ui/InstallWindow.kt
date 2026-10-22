@@ -33,7 +33,6 @@ import com.winars.app.core.AppWindow
 import com.winars.app.core.ExeIconExtractor
 import com.winars.app.core.FileBridge
 import com.winars.app.core.Shortcut
-import com.winars.app.core.WineBackends
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,7 +57,7 @@ fun InstallContent(w: AppWindow.Install) {
         value = withContext(Dispatchers.IO) { ExeIconExtractor.getIcon(ctx, w.exe, probe.iconKey) }
     }
 
-    var desktop by remember { mutableStateOf(true) }
+    var desktop by remember { mutableStateOf(false) }
     var start by remember { mutableStateOf(false) }
     var phase by remember { mutableStateOf(Phase.Idle) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -67,17 +66,20 @@ fun InstallContent(w: AppWindow.Install) {
     fun install() {
         phase = Phase.Running
         scope.launch {
-            // ярлык: переиспользуем существующий для того же exe
-            val existing = st.shortcuts.firstOrNull { it.exePath == w.exe.absolutePath }
-            val sc = (existing ?: Shortcut(st.newShortcutId(), name, w.exe.absolutePath)).copy(
-                onDesktop = desktop || existing?.onDesktop == true,
-                inStart = start || existing?.inStart == true
-            )
-            if (existing == null) st.addShortcut(sc) else st.updateShortcut(sc)
+            // ярлык на сам файл — только если пользователь отметил (у установщика ярлык появится после установки сам)
+            if (desktop || start) {
+                val existing = st.shortcuts.firstOrNull { it.exePath == w.exe.absolutePath }
+                val sc = (existing ?: Shortcut(st.newShortcutId(), name, w.exe.absolutePath)).copy(
+                    onDesktop = desktop || existing?.onDesktop == true,
+                    inStart = start || existing?.inStart == true,
+                    icon = icon?.absolutePath ?: ""
+                )
+                if (existing == null) st.addShortcut(sc) else st.updateShortcut(sc)
+            }
 
-            val r = WineBackends.current.launch(w.exe, false)
-            r.onSuccess { message = "Запущено: ${FileBridge.toWindowsPath(ctx, w.exe)}"; error = false }
-            r.onFailure { message = "Ярлык создан. Запуск невозможен: ${it.message}"; error = true }
+            val r = st.wine.launch(w.exe, false)
+            r.onSuccess { message = "Запускаю в Wine…"; error = false }
+            r.onFailure { message = it.message ?: "Не удалось запустить"; error = true }
             phase = Phase.Done
         }
     }
@@ -91,13 +93,19 @@ fun InstallContent(w: AppWindow.Install) {
         Spacer(Modifier.height(14.dp))
 
         Column(Modifier.fillMaxWidth()) {
-            FluentCheckbox(desktop, "Создать ярлык на рабочем столе", { desktop = it })
+            FluentCheckbox(desktop, "Создать ярлык на этот файл", { desktop = it })
             FluentCheckbox(start, "Добавить в меню Пуск", { start = it })
         }
-        Spacer(Modifier.height(12.dp))
+        Text("После установки ярлыки программы появятся на рабочем столе и в меню Пуск сами.", color = Fluent.TextDim, fontSize = 11.sp)
+        Spacer(Modifier.height(10.dp))
 
         when (phase) {
-            Phase.Running -> { FluentProgress(null); Spacer(Modifier.height(8.dp)); Text("Выполняется…", color = Fluent.TextDim, fontSize = 12.sp) }
+            Phase.Running -> {
+                val p = st.wine.installProgress
+                FluentProgress(if (p >= 0) p / 100f else null)
+                Spacer(Modifier.height(8.dp))
+                Text(if (p >= 0) "Установка системы Wine: $p%" else "Запуск…", color = Fluent.TextDim, fontSize = 12.sp)
+            }
             Phase.Done -> {
                 FluentProgress(1f)
                 Spacer(Modifier.height(8.dp))

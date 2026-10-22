@@ -19,7 +19,7 @@ import java.nio.ByteOrder
 object ExeIconExtractor {
 
     fun customFile(ctx: Context, key: String) = File(ctx.filesDir, "icons_custom/$key.png")
-    fun extractedFile(ctx: Context, key: String) = File(ctx.filesDir, "icons_extracted/$key.png")
+    fun extractedFile(ctx: Context, key: String) = File(ctx.filesDir, "icons/$key.png")
 
     /** Быстро: только то, что уже лежит на диске. */
     fun cachedIcon(ctx: Context, key: String): File? =

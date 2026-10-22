@@ -14,7 +14,7 @@ import android.view.View;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
-import com.winlator.MainActivity;
+import com.winlator.WinlatorConstants;
 import com.winlator.R;
 import com.winlator.core.AppUtils;
 import com.winlator.core.FileUtils;
@@ -221,7 +221,7 @@ public class LogView extends View {
                 computeScrollSize();
             }
             postInvalidate();
-            if (MainActivity.DEBUG_MODE) System.out.println(line);
+            if (WinlatorConstants.DEBUG_MODE) System.out.println(line);
         }
     }
 

@@ -21,6 +21,8 @@ jobs:
       - name: zstd
         run: sudo apt-get update -y && sudo apt-get install -y zstd
 
+      # Бинарники ядра собраны под /data/data/com.winlator/files/rootfs.
+      # Заменяем на com.winars.app/files/root (та же длина) в rootfs.tzst, box64, драйверах и jniLibs.
       - name: Patch core paths (com.winlator -> com.winars.app)
         run: python3 tools/patch_assets.py app/src/main/assets app/src/main/jniLibs
 

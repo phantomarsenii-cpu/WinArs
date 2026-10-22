@@ -9,7 +9,7 @@ import android.widget.ArrayAdapter;
 import android.widget.PopupMenu;
 import android.widget.Spinner;
 
-import com.winlator.MainActivity;
+import com.winlator.WinlatorConstants;
 import com.winlator.R;
 import com.winlator.contentdialog.ContentDialog;
 import com.winlator.xenvironment.RootFS;
@@ -268,63 +268,12 @@ public abstract class GeneralComponents {
 
         String filename = type.lowerName()+"-"+identifier+".tzst";
         File destination = new File(componentDir, filename);
-        TarCompressorUtils.compress(TarCompressorUtils.Type.ZSTD, new File(tempDir, "/."), destination, MainActivity.CONTAINER_PATTERN_COMPRESSION_LEVEL);
+        TarCompressorUtils.compress(TarCompressorUtils.Type.ZSTD, new File(tempDir, "/."), destination, WinlatorConstants.CONTAINER_PATTERN_COMPRESSION_LEVEL);
         FileUtils.delete(tempDir);
     }
 
-    private static void openFileForInstall(final MainActivity activity, final Type type, final Spinner spinner, final String defaultItem) {
-        activity.setOpenFileCallback((uri) -> {
-            String path = FileUtils.getFilePathFromUri(uri);
-            if (path == null) return;
-
-            try {
-                File source = new File(path);
-                switch (type) {
-                    case SOUNDFONT: {
-                        String filename = FileUtils.getName(path);
-                        File destination = new File(getComponentDir(type, activity), filename);
-                        if (destination.isFile()) FileUtils.delete(destination);
-                        if (FileUtils.copy(source, destination)) loadSpinner(type, spinner, parseDisplayText(type, filename), defaultItem);
-                        break;
-                    }
-                    case ADRENOTOOLS_DRIVER: {
-                        byte[] manifestData = ZipUtils.read(source, "*.json");
-                        if (manifestData != null) {
-                            JSONObject manifestJSONObject = new JSONObject(new String(manifestData));
-                            String filename = manifestJSONObject.optString("name", manifestJSONObject.optString("libraryName", ""));
-                            File destination = new File(getComponentDir(type, activity), filename);
-                            if (destination.isDirectory()) FileUtils.delete(destination);
-                            destination.mkdirs();
-                            if (ZipUtils.extract(source, destination)) loadSpinner(type, spinner, filename, defaultItem);
-                        }
-                        break;
-                    }
-                    default: {
-                        TarCompressorUtils.Type compressedType = TarCompressorUtils.Type.ZSTD;
-                        byte[] manifestData = TarCompressorUtils.read(compressedType, source, "*.json");
-                        if (manifestData == null) manifestData = TarCompressorUtils.read(compressedType = TarCompressorUtils.Type.XZ, source, "*.json");
-                        if (manifestData != null) {
-                            JSONObject manifestJSONObject = new JSONObject(new String(manifestData));
-                            String contentType = manifestJSONObject.optString("type", "").toUpperCase(Locale.ENGLISH);
-                            String identifier = StringUtils.parseIdentifier(manifestJSONObject.optString("versionName", ""));
-                            JSONArray filesJSONArray = manifestJSONObject.optJSONArray("files");
-
-                            if (contentType.equals(type.name()) && !identifier.isEmpty() && filesJSONArray != null) {
-                                installFromPackagedFile(activity, compressedType, type, source, identifier, filesJSONArray);
-                                loadSpinner(type, spinner, identifier, defaultItem);
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-            catch (JSONException e) {}
-        });
-
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        activity.startActivityForResult(intent, MainActivity.OPEN_FILE_REQUEST_CODE);
+    private static void openFileForInstall(final android.app.Activity activity, final Type type, final Spinner spinner, final String defaultItem) {
+        // UI Winlator удалён: установка компонентов из файла выполняется вне приложения
     }
 
     private static void showDownloadableListDialog(Type type, final Spinner spinner, final String defaultItem) {
@@ -361,7 +310,7 @@ public abstract class GeneralComponents {
                     showDownloadableListDialog(type, spinner, defaultItem);
                     break;
                 case FILE:
-                    openFileForInstall((MainActivity)context, type, spinner, defaultItem);
+                    openFileForInstall((android.app.Activity)context, type, spinner, defaultItem);
                     break;
                 case BOTH:
                     PopupMenu popupMenu = new PopupMenu(context, v);
@@ -370,7 +319,7 @@ public abstract class GeneralComponents {
                     popupMenu.setOnMenuItemClickListener((menuItem) -> {
                         int itemId = menuItem.getItemId();
                         if (itemId == R.id.menu_item_open_file) {
-                            openFileForInstall((MainActivity)context, type, spinner, defaultItem);
+                            openFileForInstall((android.app.Activity)context, type, spinner, defaultItem);
                         }
                         else if (itemId == R.id.menu_item_download_file) {
                             showDownloadableListDialog(type, spinner, defaultItem);

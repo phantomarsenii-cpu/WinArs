@@ -17,7 +17,7 @@ import android.widget.PopupWindow;
 
 import androidx.annotation.Nullable;
 
-import com.winlator.MainActivity;
+import com.winlator.WinlatorConstants;
 import com.winlator.R;
 import com.winlator.core.AppUtils;
 import com.winlator.core.FileUtils;
@@ -122,17 +122,8 @@ public class ImagePickerView extends View implements View.OnClickListener {
 
         View browseButton = view.findViewById(R.id.BTBrowse);
         browseButton.setOnClickListener((v) -> {
-            MainActivity activity = (MainActivity)context;
-            Intent intent = new Intent(Intent.ACTION_PICK);
-            intent.setType("image/*");
-            activity.setOpenFileCallback((data) -> {
-                Bitmap bitmap = ImageUtils.getBitmapFromUri(context, data, 1280);
-                if (bitmap == null) return;
-
-                ImageUtils.save(bitmap, userWallpaperFile, Bitmap.CompressFormat.PNG, 100);
-                popupWindow[0].dismiss();
-            });
-            activity.startActivityForResult(intent, MainActivity.OPEN_FILE_REQUEST_CODE);
+            
+            // выбор своей картинки теперь делает оболочка WinArs
         });
 
         popupWindow[0] = AppUtils.showPopupWindow(anchor, view, 0, 200);

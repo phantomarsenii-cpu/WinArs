@@ -21,9 +21,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
-import com.winlator.MainActivity;
+import com.winlator.WinlatorConstants;
 import com.winlator.R;
-import com.winlator.XServerDisplayActivity;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -275,12 +274,12 @@ public class ForegroundService extends Service {
         boolean containerActive = sessionActive.get();
 
         // Determine target activity: Game screen if active, else Main menu
-        Class<?> targetActivity = containerActive ? XServerDisplayActivity.class : MainActivity.class;
+        Class<?> targetActivity = containerActive ? WinlatorConstants.hostActivity() : WinlatorConstants.hostActivity();
 
         Notification n = notificationUtils.createForegroundNotification(
                 getNotificationContent(),
                 "Winlator",
-                XServerDisplayActivity.class, // Service class for the 'Exit' action
+                WinlatorConstants.hostActivity(), // Service class for the 'Exit' action
                 null, // Exit action here, not used because might cause issues
                 targetActivity // Activity class for the 'Open' (notification tap) action
         );
