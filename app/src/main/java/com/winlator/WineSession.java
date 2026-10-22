@@ -781,6 +781,8 @@ public class WineSession extends ContextWrapper {
         else return false;
     }
 
+    public int frameRatingWindowId = -1;
+    public void changeFrameRatingVisibility(Window window, boolean visible) {}
     public SharedPreferences getPreferences() { return preferences; }
     public XServer getXServer() { return xServer; }
     public WinHandler getWinHandler() { return winHandler; }

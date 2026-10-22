@@ -406,7 +406,7 @@ public abstract class FileUtils {
         return dotIndex != -1 ? filename.substring(dotIndex + 1) : "";
     }
 
-    public static void openIntent(Activity activity, String path) {
+    public static void openIntent(Context activity, String path) {
         Intent intent;
         if (path.startsWith("file://")) {
             File file = new File(Uri.decode(path.replace("file://", "")));
