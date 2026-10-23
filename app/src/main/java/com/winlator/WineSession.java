@@ -113,7 +113,9 @@ public class WineSession extends ContextWrapper {
         void onReady();
         /** Изменился список окон Wine (для панели задач). */
         void onWindowsChanged();
-        /** Wine завершился или сессия остановлена. */
+        /** Закрылась последняя программа Wine. X-сервер и сессия остаются живыми. */
+        void onGuestExit();
+        /** Сессия остановлена целиком (X-сервер/ядро). */
         void onExit();
         void onError(String message);
     }
@@ -154,6 +156,9 @@ public class WineSession extends ContextWrapper {
     private Listener listener;
     private boolean ready = false;
     private volatile boolean stopped = false;
+    private GuestProgramLauncherComponent guestLauncher;
+    private volatile boolean guestRunning = false;
+    private boolean maximizedOnce = false;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     public WineSession(Context base) {
@@ -229,6 +234,14 @@ public class WineSession extends ContextWrapper {
                     });
                 }
 
+                // первое окно программы разворачиваем на весь X-экран: он совпадает с моим окном, чёрных полей нет
+                if (!maximizedOnce && ready && preferences.getBoolean("wa_auto_maximize", true)
+                        && window.isRenderable() && !window.isDesktopWindow() && !window.getName().isEmpty()) {
+                    maximizedOnce = true;
+                    final long handle = window.getHandle();
+                    uiHandler.postDelayed(() -> { if (!stopped) winHandler.showWindow(handle, 3); }, 600);
+                }
+
                 if (hideDesktop && window.attributes.isViewable() && window.isDesktopWindow()) {
                     window.attributes.setViewable(false);
                     if (window.attributes.isEnabled()) window.disableAllDescendants();
@@ -281,8 +294,9 @@ public class WineSession extends ContextWrapper {
         viewRoot.addView(xServerView);
 
         touchpadView = new TouchpadView(this, xServer, true);
-        touchpadView.setSensitivity(preferences.getFloat("cursor_speed", 1.0f));
-        touchpadView.setMoveCursorToTouchpoint(preferences.getBoolean("move_cursor_to_touchpoint", false));
+        // прямое соответствие 1:1: касание/перо = точка на X-экране (без относительного режима и множителя)
+        touchpadView.setSensitivity(1.0f);
+        touchpadView.setMoveCursorToTouchpoint(true);
         viewRoot.addView(touchpadView);
 
         // нужен GamepadHandler; на экран не добавляется
@@ -350,10 +364,63 @@ public class WineSession extends ContextWrapper {
         winHandler.showDesktop();
     }
 
-    /** Запустить ещё одну программу в уже работающей сессии. */
+    public boolean isGuestRunning() {
+        return guestRunning;
+    }
+
+    /** Запустить программу: внутри работающего Wine, а если Wine уже закрылся — заново поднять его в этой же сессии. */
     public void runProgram(String unixPath) {
-        String dos = WineUtils.unixToDOSPath(unixPath, container);
-        winHandler.exec(dos);
+        if (guestRunning) {
+            winHandler.exec(WineUtils.unixToDOSPath(unixPath, container));
+            return;
+        }
+        launchProgram(unixPath);
+    }
+
+    private void launchProgram(String unixPath) {
+        if (guestLauncher == null || stopped) return;
+        unixExecPath = unixPath;
+        ready = false;
+        maximizedOnce = false;
+        guestRunning = true;
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String guestExecutable = "wine explorer /desktop=nogui,"+xServer.screenInfo+" "+getWineStartCommand();
+                guestLauncher.setGuestExecutable(guestExecutable);
+                guestLauncher.start();
+            }
+            catch (Throwable t) {
+                fail("Не удалось запустить программу: " + t);
+            }
+        });
+    }
+
+    /** Закрыть все программы Wine, не останавливая X-сервер. */
+    public void stopGuest() {
+        if (guestLauncher != null) guestLauncher.stop();
+        onGuestExit();
+    }
+
+    private void onGuestExit() {
+        guestRunning = false;
+        uiHandler.post(() -> { if (listener != null && !stopped) listener.onGuestExit(); });
+    }
+
+    /**
+     * Убираем рамки Wine: заголовок и толщина границ окон = 0, у программы остаётся только моя шапка.
+     * Wine рисует рамку сам (оконного менеджера нет), поэтому гасим её через метрики окон в реестре.
+     */
+    private void applyUndecoratedMetrics() {
+        File userRegFile = new File(rootFS.getRootDir(), RootFS.WINEPREFIX+"/user.reg");
+        try (WineRegistryEditor registryEditor = new WineRegistryEditor(userRegFile)) {
+            String key = "Control Panel\\Desktop\\WindowMetrics";
+            registryEditor.setStringValue(key, "CaptionHeight", "0");
+            registryEditor.setStringValue(key, "CaptionWidth", "0");
+            registryEditor.setStringValue(key, "SmCaptionHeight", "0");
+            registryEditor.setStringValue(key, "SmCaptionWidth", "0");
+            registryEditor.setStringValue(key, "BorderWidth", "0");
+            registryEditor.setStringValue(key, "PaddedBorderWidth", "0");
+        }
     }
 
     // ---------- перенесено из XServerDisplayActivity ----------
@@ -383,6 +450,7 @@ public class WineSession extends ContextWrapper {
         String desktopTheme = container.getDesktopTheme();
         if (!(desktopTheme+","+xServer.screenInfo).equals(container.getExtra("desktopTheme"))) {
             WineThemeManager.apply(this, new WineThemeManager.ThemeInfo(desktopTheme), xServer.screenInfo);
+            applyUndecoratedMetrics();
             container.putExtra("desktopTheme", desktopTheme+","+xServer.screenInfo);
             containerDataChanged = true;
         }
@@ -472,7 +540,10 @@ public class WineSession extends ContextWrapper {
         }
 
         guestProgramLauncherComponent.setEnvVars(envVars);
-        guestProgramLauncherComponent.setTerminationCallback((status) -> exit());
+        guestLauncher = guestProgramLauncherComponent;
+        guestRunning = true;
+        // закрылась программа — это НЕ конец системы: сессия остаётся, X-сервер живёт
+        guestProgramLauncherComponent.setTerminationCallback((status) -> onGuestExit());
         environment.addComponent(guestProgramLauncherComponent);
 
         if (overrideEnvVars != null) {

@@ -134,8 +134,58 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
         }
     }
 
+    private boolean penDown = false;
+    private boolean penRight = false;
+
+    private boolean isPen(MotionEvent event) {
+        return event.getToolType(event.getActionIndex()) == MotionEvent.TOOL_TYPE_STYLUS
+            || event.getDeviceId() == com.winlator.WinlatorConstants.PEN_REMAPPED_DEVICE_ID;
+    }
+
+    /** Перо: абсолютное позиционирование 1:1 (курсор точно под кончиком), касание = ЛКМ, кнопка пера = ПКМ. */
+    private boolean handlePen(MotionEvent event) {
+        float[] p = XForm.transformPoint(xform, event.getX(), event.getY());
+        int x = (int)p[0];
+        int y = (int)p[1];
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                xServer.injectPointerMove(x, y);
+                penRight = event.getDeviceId() == com.winlator.WinlatorConstants.PEN_REMAPPED_DEVICE_ID
+                    || (event.getButtonState() & (MotionEvent.BUTTON_STYLUS_PRIMARY | MotionEvent.BUTTON_SECONDARY)) != 0;
+                xServer.injectPointerButtonPress(penRight ? Pointer.Button.BUTTON_RIGHT : Pointer.Button.BUTTON_LEFT);
+                penDown = true;
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                xServer.injectPointerMove(x, y);
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (penDown) {
+                    xServer.injectPointerMove(x, y);
+                    xServer.injectPointerButtonRelease(penRight ? Pointer.Button.BUTTON_RIGHT : Pointer.Button.BUTTON_LEFT);
+                    penDown = false;
+                }
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    @Override
+    public boolean onGenericMotionEvent(MotionEvent event) {
+        // перо над экраном (hover) двигает курсор без касания
+        if (event.getActionMasked() == MotionEvent.ACTION_HOVER_MOVE && event.isFromSource(InputDevice.SOURCE_STYLUS)) {
+            float[] p = XForm.transformPoint(xform, event.getX(), event.getY());
+            xServer.injectPointerMove((int)p[0], (int)p[1]);
+            return true;
+        }
+        if (onExternalMouseEvent(event)) return true;
+        return super.onGenericMotionEvent(event);
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (isPen(event)) return handlePen(event);
         int actionIndex = event.getActionIndex();
         int pointerId = event.getPointerId(actionIndex);
         int actionMasked = event.getActionMasked();

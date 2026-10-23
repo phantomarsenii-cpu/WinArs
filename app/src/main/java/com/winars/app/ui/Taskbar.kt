@@ -73,7 +73,7 @@ fun BoxScope.Taskbar(st: DesktopState, landscape: Boolean) {
                     Img(R.drawable.wa_icon_settings, 32.dp)
                 }
                 // окна Wine из X-сервера: каждое — кнопка на панели задач
-                if (st.wine.session != null) {
+                if (st.wine.guestActive) {
                     TaskbarButton(
                         st.windows.any { it is AppWindow.WineScreen },
                         { toggle(st, { it is AppWindow.WineScreen }) { st.openWineScreen() } }

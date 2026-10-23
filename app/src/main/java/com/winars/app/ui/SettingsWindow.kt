@@ -134,9 +134,14 @@ fun SettingsContent() {
         Card("Ядро Wine") {
             Line("Состояние", WineBackends.current.status)
             Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Разворачивать программу на весь экран Wine", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Switch(st.autoMaximize, { st.setAutoMaximize(it) })
+            }
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FluentButton("Обновить программы", { st.importWineShortcuts(manual = true) }, primary = true)
-                if (st.wine.session != null) FluentButton("Остановить Wine", { st.wine.stop() })
+                if (st.wine.session != null) FluentButton("Перезапустить ядро", { st.wine.stop() })
             }
             Spacer(Modifier.height(4.dp))
             Text("Ярлыки установленных программ переносятся из Wine в рабочий стол и меню Пуск WinArs.", color = Fluent.TextDim, fontSize = 11.sp)

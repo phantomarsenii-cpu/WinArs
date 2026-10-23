@@ -57,6 +57,10 @@ class WinlatorBackend(private val app: Context) : WineBackend {
     val xWindows = mutableStateListOf<WineSession.WindowInfo>()
     var sessionReady by mutableStateOf(false)
         private set
+    /** есть ли сейчас запущенные программы Wine (сессия при этом может жить и без них) */
+    var guestActive by mutableStateOf(false)
+        private set
+    var onGuestExit: () -> Unit = {}
 
     var onSessionReady: () -> Unit = {}
     var onSessionExit: () -> Unit = {}
@@ -89,6 +93,8 @@ class WinlatorBackend(private val app: Context) : WineBackend {
 
         // 3. Wine уже работает -> запускаем программу внутри него
         session?.let {
+            if (!it.isGuestRunning) sessionReady = false
+            guestActive = true
             it.runProgram(exe.absolutePath)
             return@withContext Result.success(Unit)
         }
@@ -97,10 +103,15 @@ class WinlatorBackend(private val app: Context) : WineBackend {
         val s = WineSession(app)
         session = s
         sessionReady = false
+        guestActive = true
         s.start(container, exe.absolutePath, object : WineSession.Listener {
             override fun onReady() { sessionReady = true; refreshWindows(); onSessionReady() }
             override fun onWindowsChanged() { refreshWindows() }
-            override fun onExit() { session = null; sessionReady = false; xWindows.clear(); onSessionExit() }
+            override fun onGuestExit() {
+                guestActive = false; sessionReady = false; xWindows.clear()
+                this@WinlatorBackend.onGuestExit()
+            }
+            override fun onExit() { session = null; sessionReady = false; guestActive = false; xWindows.clear(); onSessionExit() }
             override fun onError(message: String) { this@WinlatorBackend.onError(message) }
         })
         Result.success(Unit)
@@ -113,6 +124,10 @@ class WinlatorBackend(private val app: Context) : WineBackend {
         xWindows.addAll(list)
     }
 
+    /** закрыть программы Wine, X-сервер оставить */
+    fun stopGuest() { session?.stopGuest() }
+
+    /** остановить ядро целиком (после этого система перезапускается) */
     fun stop() { session?.stop() }
 
     private suspend fun installRootFs(): Boolean = suspendCancellableCoroutine { cont ->

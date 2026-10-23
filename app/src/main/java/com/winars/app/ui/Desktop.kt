@@ -30,7 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -200,28 +200,35 @@ fun Img(res: Int, size: Dp, modifier: Modifier = Modifier) = Image(painterResour
 
 @Composable
 private fun DesktopIcons(state: DesktopState, reserve: Dp) {
-    val ctx = LocalContext.current
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(96.dp),
-        modifier = Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 28.dp, bottom = reserve)
-    ) {
-        item(key = "sys_explorer") {
-            DesktopTile("Проводник", state.selectedId == "sys_explorer", { state.selectedId = "sys_explorer" }, { state.openExplorer() }, null) {
-                Img(R.drawable.wa_icon_explorer, 56.dp)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val landscape = maxWidth > maxHeight
+        val iconSize = if (landscape) 44.dp else 56.dp
+        val tileWidth = if (landscape) 76.dp else 88.dp
+        val tileHeight = iconSize + 62.dp
+
+        // раскладка как в Windows: иконки идут сверху вниз и переносятся в следующий столбец
+        LazyHorizontalGrid(
+            rows = GridCells.Adaptive(tileHeight),
+            modifier = Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 28.dp, bottom = reserve)
+        ) {
+            item(key = "sys_explorer") {
+                DesktopTile("Проводник", state.selectedId == "sys_explorer", { state.selectedId = "sys_explorer" }, { state.openExplorer() }, null, tileWidth, iconSize) {
+                    Img(R.drawable.wa_icon_explorer, iconSize)
+                }
             }
-        }
-        item(key = "sys_settings") {
-            DesktopTile("Параметры", state.selectedId == "sys_settings", { state.selectedId = "sys_settings" }, { state.openSettings() }, null) {
-                Img(R.drawable.wa_icon_settings, 56.dp)
+            item(key = "sys_settings") {
+                DesktopTile("Параметры", state.selectedId == "sys_settings", { state.selectedId = "sys_settings" }, { state.openSettings() }, null, tileWidth, iconSize) {
+                    Img(R.drawable.wa_icon_settings, iconSize)
+                }
             }
-        }
-        val onDesktop = state.shortcuts.filter { it.onDesktop }
-        items(onDesktop.size, key = { onDesktop[it].id }) { i ->
-            val sc = onDesktop[i]
-            DesktopTile(
-                sc.name, state.selectedId == sc.id, { state.selectedId = sc.id }, { state.launch(sc) },
-                { shortcutMenu(state, sc) }
-            ) { ShortcutIcon(sc, 56.dp) }
+            val onDesktop = state.shortcuts.filter { it.onDesktop }
+            items(onDesktop.size, key = { onDesktop[it].id }) { i ->
+                val sc = onDesktop[i]
+                DesktopTile(
+                    sc.name, state.selectedId == sc.id, { state.selectedId = sc.id }, { state.launch(sc) },
+                    { shortcutMenu(state, sc) }, tileWidth, iconSize
+                ) { ShortcutIcon(sc, iconSize) }
+            }
         }
     }
 }
@@ -233,12 +240,14 @@ private fun DesktopTile(
     onSelect: () -> Unit,
     onOpen: () -> Unit,
     menu: (() -> List<MenuItem>)?,
+    tileWidth: Dp,
+    iconSize: Dp,
     icon: @Composable () -> Unit
 ) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     Column(
-        Modifier.width(92.dp).padding(2.dp)
+        Modifier.width(tileWidth).padding(2.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(
                 when {
@@ -252,7 +261,7 @@ private fun DesktopTile(
             .padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) { icon() }
+        Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) { icon() }
         Spacer(Modifier.height(4.dp))
         Text(
             label, color = Color.White, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,

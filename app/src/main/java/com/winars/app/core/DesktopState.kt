@@ -45,6 +45,11 @@ class MenuState(val position: Offset, val items: List<MenuItem>)
 /** Единое состояние: его рисуют и экран телефона, и Presentation на мониторе. */
 class DesktopState(val app: Context) {
     private val prefs = app.getSharedPreferences("winars", Context.MODE_PRIVATE)
+    /** тот же файл, что читает ядро (PreferenceManager.getDefaultSharedPreferences) */
+    private val corePrefs = app.getSharedPreferences(app.packageName + "_preferences", Context.MODE_PRIVATE)
+    var autoMaximize by mutableStateOf(corePrefs.getBoolean("wa_auto_maximize", true))
+        private set
+    fun setAutoMaximize(v: Boolean) { autoMaximize = v; corePrefs.edit().putBoolean("wa_auto_maximize", v).apply() }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     val profile: DeviceProfiler.Profile = DeviceProfiler.detect(app)
@@ -92,7 +97,7 @@ class DesktopState(val app: Context) {
 
     fun open(w: AppWindow) { startOpen = false; windows.add(w) }
     fun close(w: AppWindow) {
-        if (w is AppWindow.WineScreen) wine.stop()     // закрыли экран Wine = остановили Wine
+        if (w is AppWindow.WineScreen) wine.stopGuest()   // закрыли окно Wine = закрыли программы; X-сервер живёт
         windows.remove(w)
     }
     fun openWineScreen() {
@@ -103,7 +108,7 @@ class DesktopState(val app: Context) {
     }
     private fun onWineExit() {
         windows.removeAll { it is AppWindow.WineScreen }
-        toast("Wine завершён. Перезапускаю систему…")
+        toast("Ядро Wine остановлено. Перезапускаю систему…")
         // как и в оригинальном Winlator: чистый перезапуск процесса, чтобы не оставлять состояние XServer/GL
         scope.launch { delay(1200); AppUtils.restartApplication(app) }
     }
@@ -196,6 +201,7 @@ class DesktopState(val app: Context) {
         WineBackends.init(app)
         wine.onSessionReady = { openWineScreen() }
         wine.onSessionExit = { onWineExit() }
+        wine.onGuestExit = { windows.removeAll { it is AppWindow.WineScreen } }
         wine.onError = { toast(it) }
         refreshBackdrop()
         importWineShortcuts()

@@ -2,6 +2,7 @@ package com.winars.app.core
 
 import android.view.InputDevice
 import android.view.MotionEvent
+import com.winlator.WinlatorConstants
 
 /**
  * S-Pen:
@@ -22,7 +23,7 @@ object SpenInput {
         return MotionEvent.obtain(
             ev.downTime, ev.eventTime, ev.action, n, props, coords,
             ev.metaState, MotionEvent.BUTTON_SECONDARY,
-            ev.xPrecision, ev.yPrecision, ev.deviceId, ev.edgeFlags,
+            ev.xPrecision, ev.yPrecision, WinlatorConstants.PEN_REMAPPED_DEVICE_ID, ev.edgeFlags,
             InputDevice.SOURCE_MOUSE, ev.flags
         )
     }

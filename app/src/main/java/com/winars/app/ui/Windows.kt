@@ -67,7 +67,7 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
         is AppWindow.Settings -> DpSize(720.dp, 540.dp)
         is AppWindow.Install -> DpSize(460.dp, 460.dp)
         is AppWindow.Properties -> DpSize(420.dp, 400.dp)
-        is AppWindow.WineScreen -> DpSize(980.dp, 600.dp)
+        is AppWindow.WineScreen -> DpSize(960.dp, 580.dp)   // 16:9 + заголовок 40dp
     }
     val icon = when (w) {
         is AppWindow.Explorer -> R.drawable.wa_icon_explorer
