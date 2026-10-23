@@ -13,6 +13,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.winars.app.core.AppWindow
 import com.winars.app.core.DesktopState
 import com.winars.app.core.DexChooserDialog
 import com.winars.app.core.DexController
@@ -108,6 +109,10 @@ class MainActivity : ComponentActivity() {
 
     /** Пока рабочий стол на мониторе, клавиатура телефона (физическая и экранная) пишет в него. */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val top = st.windows.lastOrNull()
+        if (top is AppWindow.WineApp && !top.minimized && event.keyCode !in PASS_THROUGH) {
+            if (st.wine.session?.dispatchKey(event) == true) return true
+        }
         val p = dex.presentation
         if (st.dexActive && p != null && event.keyCode !in PASS_THROUGH) {
             if (p.forwardKey(event)) return true

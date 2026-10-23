@@ -42,6 +42,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
@@ -58,7 +59,7 @@ import kotlin.math.roundToInt
 @Composable
 fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: Dp) {
     val st = LocalDesktop.current
-    var offset by remember { mutableStateOf(Offset.Zero) }
+    var offset by remember { mutableStateOf(Offset(((w.id % 5) * 36).toFloat(), ((w.id % 5) * 36).toFloat())) }
     var maximized by remember { mutableStateOf(false) }
 
     val dialog = w is AppWindow.Install || w is AppWindow.Properties
@@ -67,11 +68,17 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
         is AppWindow.Settings -> DpSize(720.dp, 540.dp)
         is AppWindow.Install -> DpSize(460.dp, 460.dp)
         is AppWindow.Properties -> DpSize(420.dp, 400.dp)
-        is AppWindow.WineScreen -> DpSize(960.dp, 580.dp)   // 16:9 + заголовок 40dp
+        is AppWindow.WineApp -> {
+            // 1 пиксель окна Wine = 1 физический пиксель экрана, плюс моя шапка 40dp
+            val info = st.wine.xWindows.firstOrNull { it.id == w.xid }
+            val d = LocalDensity.current.density
+            if (info != null) DpSize((info.width / d).dp, ((info.height - st.wineCropTop) / d).dp + 40.dp) else DpSize(640.dp, 480.dp)
+        }
     }
     val icon = when (w) {
         is AppWindow.Explorer -> R.drawable.wa_icon_explorer
         is AppWindow.Settings -> R.drawable.wa_icon_settings
+        is AppWindow.WineApp -> R.drawable.wa_generic_exe
         else -> R.drawable.wa_icon_launcher
     }
     val full = !dialog && (compact || maximized)
@@ -115,7 +122,7 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
             is AppWindow.Settings -> SettingsContent()
             is AppWindow.Install -> InstallContent(w)
             is AppWindow.Properties -> PropertiesContent(w)
-            is AppWindow.WineScreen -> WineScreenContent()
+            is AppWindow.WineApp -> WineAppContent(w)
         }
     }
 }

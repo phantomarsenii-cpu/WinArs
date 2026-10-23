@@ -139,6 +139,12 @@ fun SettingsContent() {
                 Switch(st.autoMaximize, { st.changeAutoMaximize(it) })
             }
             Spacer(Modifier.height(8.dp))
+            Text("Обрезать заголовок Wine сверху: ${st.wineCropTop} px", color = Color.White, fontSize = 13.sp)
+            Slider(
+                st.wineCropTop.toFloat(), { st.changeWineCropTop(it.toInt()) },
+                valueRange = 0f..48f, steps = 47
+            )
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FluentButton("Обновить программы", { st.importWineShortcuts(manual = true) }, primary = true)
                 if (st.wine.session != null) FluentButton("Перезапустить ядро", { st.wine.stop() })

@@ -33,8 +33,10 @@ sealed class AppWindow {
     class Settings : AppWindow() { override val title = "Параметры" }
     class Install(val exe: File) : AppWindow() { override val title = "Установка ${exe.name}" }
     class Properties(val shortcutId: String) : AppWindow() { override val title = "Свойства" }
-    /** Экран Wine: X-сервер, нарисованный внутри окна WinArs */
-    class WineScreen : AppWindow() { override val title = "Wine" }
+    /** Одна программа Wine = одно окно WinArs. xid — окно в X-сервере. */
+    class WineApp(val xid: Int, initialTitle: String) : AppWindow() {
+        override var title by mutableStateOf(initialTitle.ifBlank { "Wine" })
+    }
 
     companion object { private val counter = AtomicLong(0) }
 }
@@ -47,8 +49,30 @@ class DesktopState(val app: Context) {
     private val prefs = app.getSharedPreferences("winars", Context.MODE_PRIVATE)
     /** тот же файл, что читает ядро (PreferenceManager.getDefaultSharedPreferences) */
     private val corePrefs = app.getSharedPreferences(app.packageName + "_preferences", Context.MODE_PRIVATE)
-    var autoMaximize by mutableStateOf(corePrefs.getBoolean("wa_auto_maximize", true))
+    var autoMaximize by mutableStateOf(corePrefs.getBoolean("wa_auto_maximize", false))
         private set
+    /** Сколько пикселей сверху отрезать у окна Wine (его собственный заголовок). 0 = показывать целиком. */
+    var wineCropTop by mutableIntStateOf(prefs.getInt("wine_crop_top", 0))
+        private set
+    fun changeWineCropTop(v: Int) { wineCropTop = v; prefs.edit().putInt("wine_crop_top", v).apply() }
+
+    /** Ячейки иконок рабочего стола (перетаскивание): id -> (столбец, строка). Хранится в prefs. */
+    val iconCells = androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.unit.IntOffset>().apply {
+        try {
+            val o = org.json.JSONObject(prefs.getString("icon_cells", "{}") ?: "{}")
+            o.keys().forEach { k ->
+                val p = o.getString(k).split(",")
+                put(k, androidx.compose.ui.unit.IntOffset(p[0].toInt(), p[1].toInt()))
+            }
+        } catch (e: Exception) { }
+    }
+    fun setIconCell(id: String, cell: androidx.compose.ui.unit.IntOffset) {
+        iconCells[id] = cell
+        val o = org.json.JSONObject()
+        iconCells.forEach { (k, v) -> o.put(k, "${v.x},${v.y}") }
+        prefs.edit().putString("icon_cells", o.toString()).apply()
+    }
+
     fun changeAutoMaximize(v: Boolean) { autoMaximize = v; corePrefs.edit().putBoolean("wa_auto_maximize", v).apply() }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -97,17 +121,31 @@ class DesktopState(val app: Context) {
 
     fun open(w: AppWindow) { startOpen = false; windows.add(w) }
     fun close(w: AppWindow) {
-        if (w is AppWindow.WineScreen) wine.stopGuest()   // закрыли окно Wine = закрыли программы; X-сервер живёт
+        if (w is AppWindow.WineApp) {
+            // как Alt+F4: программа сама закроется; окно исчезнет, когда она его уберёт
+            wine.session?.closeXWindow(w.xid)
+            return
+        }
         windows.remove(w)
     }
-    fun openWineScreen() {
-        startOpen = false
-        windows.removeAll { it is AppWindow.Install }
-        val e = windows.firstOrNull { it is AppWindow.WineScreen }
-        if (e != null) focus(e) else windows.add(AppWindow.WineScreen())
+    /** Окна Wine из X-сервера -> окна WinArs: новое окно программы открывается, закрытое исчезает. */
+    fun syncWineWindows() {
+        val infos = wine.xWindows.toList()
+        val ids = infos.map { it.id }.toSet()
+        windows.removeAll { it is AppWindow.WineApp && it.xid !in ids }
+        infos.forEach { info ->
+            val existing = windows.firstOrNull { it is AppWindow.WineApp && it.xid == info.id } as AppWindow.WineApp?
+            if (existing == null) {
+                startOpen = false
+                windows.removeAll { it is AppWindow.Install }
+                windows.add(AppWindow.WineApp(info.id, info.title ?: ""))
+            } else {
+                existing.title = (info.title ?: "").ifBlank { "Wine" }
+            }
+        }
     }
     private fun onWineExit() {
-        windows.removeAll { it is AppWindow.WineScreen }
+        windows.removeAll { it is AppWindow.WineApp }
         toast("Ядро Wine остановлено. Перезапускаю систему…")
         // как и в оригинальном Winlator: чистый перезапуск процесса, чтобы не оставлять состояние XServer/GL
         scope.launch { delay(1200); AppUtils.restartApplication(app) }
@@ -199,9 +237,9 @@ class DesktopState(val app: Context) {
 
     init {
         WineBackends.init(app)
-        wine.onSessionReady = { openWineScreen() }
+        wine.onWindowsRefreshed = { syncWineWindows() }
         wine.onSessionExit = { onWineExit() }
-        wine.onGuestExit = { windows.removeAll { it is AppWindow.WineScreen } }
+        wine.onGuestExit = { windows.removeAll { it is AppWindow.WineApp } }
         wine.onError = { toast(it) }
         refreshBackdrop()
         importWineShortcuts()

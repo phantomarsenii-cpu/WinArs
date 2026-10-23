@@ -12,6 +12,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import kotlin.math.roundToInt
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -41,6 +45,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,6 +115,7 @@ fun DesktopRoot(state: DesktopState, external: Boolean) {
 
             for (w in state.windows) key(w.id) { WindowHost(w, compact, area, reserve) }
 
+            WineMasterView()
             StartMenu(state, reserve, compact)
             Taskbar(state, landscape)
             ContextMenuLayer(state)
@@ -205,32 +211,104 @@ private fun DesktopIcons(state: DesktopState, reserve: Dp) {
         val iconSize = if (landscape) 44.dp else 56.dp
         val tileWidth = if (landscape) 76.dp else 88.dp
         val tileHeight = iconSize + 62.dp
+        val sidePad = 8.dp
+        val topPad = 28.dp
 
-        // раскладка как в Windows: иконки идут сверху вниз и переносятся в следующий столбец
-        LazyHorizontalGrid(
-            rows = GridCells.Adaptive(tileHeight),
-            modifier = Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 28.dp, bottom = reserve)
-        ) {
-            item(key = "sys_explorer") {
-                DesktopTile("Проводник", state.selectedId == "sys_explorer", { state.selectedId = "sys_explorer" }, { state.openExplorer() }, null, tileWidth, iconSize) {
-                    Img(R.drawable.wa_icon_explorer, iconSize)
-                }
+        val density = LocalDensity.current
+        val tileWpx = with(density) { tileWidth.toPx() }
+        val tileHpx = with(density) { tileHeight.toPx() }
+        val sidePx = with(density) { sidePad.toPx() }
+        val topPx = with(density) { topPad.toPx() }
+
+        val cols = maxOf(1, ((maxWidth - sidePad * 2) / tileWidth).toInt())
+        val rows = maxOf(1, ((maxHeight - topPad - reserve) / tileHeight).toInt())
+
+        val ids = buildList {
+            add("sys_explorer"); add("sys_settings")
+            state.shortcuts.filter { it.onDesktop }.forEach { add(it.id) }
+        }
+
+        // ячейка каждой иконки: сохранённая (если пользователь перетаскивал) или первая свободная, столбцами сверху вниз
+        val cells = HashMap<String, IntOffset>()
+        val used = HashSet<Long>()
+        fun cellKey(c: IntOffset) = c.x.toLong() * 100000L + c.y
+        ids.forEach { id ->
+            state.iconCells[id]?.let { c ->
+                val cc = IntOffset(c.x.coerceIn(0, cols - 1), c.y.coerceIn(0, rows - 1))
+                cells[id] = cc; used.add(cellKey(cc))
             }
-            item(key = "sys_settings") {
-                DesktopTile("Параметры", state.selectedId == "sys_settings", { state.selectedId = "sys_settings" }, { state.openSettings() }, null, tileWidth, iconSize) {
-                    Img(R.drawable.wa_icon_settings, iconSize)
+        }
+        var cursor = 0
+        ids.forEach { id ->
+            if (id !in cells) {
+                var c = IntOffset(cols - 1, rows - 1)
+                while (cursor < cols * rows) {
+                    val cand = IntOffset(cursor / rows, cursor % rows)
+                    cursor++
+                    if (cellKey(cand) !in used) { c = cand; break }
                 }
+                cells[id] = c; used.add(cellKey(c))
             }
-            val onDesktop = state.shortcuts.filter { it.onDesktop }
-            items(onDesktop.size, key = { onDesktop[it].id }) { i ->
-                val sc = onDesktop[i]
-                DesktopTile(
-                    sc.name, state.selectedId == sc.id, { state.selectedId = sc.id }, { state.launch(sc) },
-                    { shortcutMenu(state, sc) }, tileWidth, iconSize
-                ) { ShortcutIcon(sc, iconSize) }
+        }
+
+        ids.forEach { id ->
+            key(id) {
+                val cell = cells[id] ?: IntOffset.Zero
+                val base = IntOffset((sidePx + cell.x * tileWpx).roundToInt(), (topPx + cell.y * tileHpx).roundToInt())
+                DraggableTile(
+                    base = base,
+                    onDrop = { dropX, dropY ->
+                        val target = IntOffset(
+                            ((dropX - sidePx) / tileWpx).roundToInt().coerceIn(0, cols - 1),
+                            ((dropY - topPx) / tileHpx).roundToInt().coerceIn(0, rows - 1)
+                        )
+                        // занято другой иконкой — меняем местами
+                        val occupant = cells.entries.firstOrNull { it.key != id && it.value == target }?.key
+                        if (occupant != null) state.setIconCell(occupant, cell)
+                        state.setIconCell(id, target)
+                    }
+                ) {
+                    when (id) {
+                        "sys_explorer" -> DesktopTile("Проводник", state.selectedId == id, { state.selectedId = id }, { state.openExplorer() }, null, tileWidth, iconSize) {
+                            Img(R.drawable.wa_icon_explorer, iconSize)
+                        }
+                        "sys_settings" -> DesktopTile("Параметры", state.selectedId == id, { state.selectedId = id }, { state.openSettings() }, null, tileWidth, iconSize) {
+                            Img(R.drawable.wa_icon_settings, iconSize)
+                        }
+                        else -> state.shortcuts.firstOrNull { it.id == id }?.let { sc ->
+                            DesktopTile(
+                                sc.name, state.selectedId == sc.id, { state.selectedId = sc.id }, { state.launch(sc) },
+                                { shortcutMenu(state, sc) }, tileWidth, iconSize
+                            ) { ShortcutIcon(sc, iconSize) }
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+/** Иконку можно взять (мышь, перо, палец) и перенести; при отпускании она встаёт в ближайшую ячейку. */
+@Composable
+private fun DraggableTile(base: IntOffset, onDrop: (Float, Float) -> Unit, content: @Composable () -> Unit) {
+    var drag by remember { mutableStateOf(Offset.Zero) }
+    var dragging by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .offset { IntOffset(base.x + drag.x.roundToInt(), base.y + drag.y.roundToInt()) }
+            .zIndex(if (dragging) 1f else 0f)
+            .pointerInput(base) {
+                detectDragGestures(
+                    onDragStart = { dragging = true },
+                    onDrag = { change, amount -> change.consume(); drag += amount },
+                    onDragEnd = {
+                        onDrop(base.x + drag.x, base.y + drag.y)
+                        drag = Offset.Zero; dragging = false
+                    },
+                    onDragCancel = { drag = Offset.Zero; dragging = false }
+                )
+            }
+    ) { content() }
 }
 
 @Composable

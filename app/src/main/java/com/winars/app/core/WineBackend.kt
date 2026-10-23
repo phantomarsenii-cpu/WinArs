@@ -61,6 +61,7 @@ class WinlatorBackend(private val app: Context) : WineBackend {
     var guestActive by mutableStateOf(false)
         private set
     var onGuestExit: () -> Unit = {}
+    var onWindowsRefreshed: () -> Unit = {}
 
     var onSessionReady: () -> Unit = {}
     var onSessionExit: () -> Unit = {}
@@ -122,6 +123,7 @@ class WinlatorBackend(private val app: Context) : WineBackend {
         val list = s.activeWindows
         xWindows.clear()
         xWindows.addAll(list)
+        onWindowsRefreshed()
     }
 
     /** закрыть программы Wine, X-сервер оставить */

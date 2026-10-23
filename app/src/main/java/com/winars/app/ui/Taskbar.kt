@@ -72,17 +72,10 @@ fun BoxScope.Taskbar(st: DesktopState, landscape: Boolean) {
                 TaskbarButton(st.windows.any { it is AppWindow.Settings }, { toggle(st, { it is AppWindow.Settings }) { st.openSettings() } }) {
                     Img(R.drawable.wa_icon_settings, 32.dp)
                 }
-                // окна Wine из X-сервера: каждое — кнопка на панели задач
-                if (st.wine.guestActive) {
-                    TaskbarButton(
-                        st.windows.any { it is AppWindow.WineScreen },
-                        { toggle(st, { it is AppWindow.WineScreen }) { st.openWineScreen() } }
-                    ) { Img(R.drawable.wa_generic_exe, 30.dp) }
-                    st.wine.xWindows.forEach { xw ->
-                        TaskbarButton(!xw.iconic, {
-                            st.openWineScreen()
-                            st.wine.session?.bringToFront(xw)
-                        }) { Img(R.drawable.wa_generic_exe, 26.dp) }
+                // каждая программа Wine — своя кнопка (её окно WinArs): клик сворачивает / показывает
+                st.windows.filterIsInstance<AppWindow.WineApp>().forEach { wa ->
+                    TaskbarButton(!wa.minimized, { toggle(st, { it === wa }) { st.focus(wa) } }) {
+                        Img(R.drawable.wa_generic_exe, 30.dp)
                     }
                 }
                 st.shortcuts.filter { it.onTaskbar }.forEach { sc ->

@@ -36,6 +36,9 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 
+import java.util.concurrent.CopyOnWriteArrayList;
+import android.view.Surface;
+
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
@@ -117,6 +120,8 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
             effectComposer.render();
         }
         else drawFrame();
+
+        drawRegionTargets();
     }
 
     protected void drawFrame() {
@@ -236,8 +241,12 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     }
 
     private void renderWindows() {
+        renderWindows(xServer.screenInfo.width, xServer.screenInfo.height);
+    }
+
+    private void renderWindows(float viewWidth, float viewHeight) {
         windowMaterial.use();
-        windowMaterial.setUniformVec2(windowMaterial.uniforms.viewSize, xServer.screenInfo.width, xServer.screenInfo.height);
+        windowMaterial.setUniformVec2(windowMaterial.uniforms.viewSize, viewWidth, viewHeight);
         quadVertices.bind(windowMaterial.programId);
 
         try (XLock lock = xServer.lock(XServer.Lockable.DRAWABLE_MANAGER)) {
@@ -252,8 +261,12 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     }
 
     private void renderCursor() {
+        renderCursor(xServer.screenInfo.width, xServer.screenInfo.height);
+    }
+
+    private void renderCursor(float viewWidth, float viewHeight) {
         cursorMaterial.use();
-        cursorMaterial.setUniformVec2(cursorMaterial.uniforms.viewSize, xServer.screenInfo.width, xServer.screenInfo.height);
+        cursorMaterial.setUniformVec2(cursorMaterial.uniforms.viewSize, viewWidth, viewHeight);
         quadVertices.bind(cursorMaterial.programId);
 
         try (XLock lock = xServer.lock(XServer.Lockable.DRAWABLE_MANAGER)) {
@@ -269,6 +282,100 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         }
 
         quadVertices.disable();
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Окна WinArs: каждое окно Wine рисуется в СВОЮ поверхность (область X-экрана -> Surface).
+    // Всё выполняется в GL-потоке мастер-вида и в том же EGL-контексте, поэтому текстуры общие.
+    // ------------------------------------------------------------------------------------------
+    public static class RegionTarget {
+        public volatile Surface surface;
+        public volatile int width = 1;
+        public volatile int height = 1;
+        public volatile int regionX = 0;
+        public volatile int regionY = 0;
+        public volatile int regionWidth = 1;
+        public volatile int regionHeight = 1;
+        volatile boolean released = false;
+        android.opengl.EGLSurface eglSurface;
+    }
+
+    private final CopyOnWriteArrayList<RegionTarget> regionTargets = new CopyOnWriteArrayList<>();
+
+    public void addRegionTarget(RegionTarget target) {
+        regionTargets.add(target);
+        xServerView.requestRender();
+    }
+
+    public void removeRegionTarget(final RegionTarget target) {
+        target.released = true;
+        regionTargets.remove(target);
+        xServerView.queueEvent(() -> {
+            if (target.eglSurface != null && target.eglSurface != EGL14.EGL_NO_SURFACE) {
+                EGL14.eglDestroySurface(EGL14.eglGetCurrentDisplay(), target.eglSurface);
+            }
+            target.eglSurface = null;
+        });
+    }
+
+    public void requestRegionRender() {
+        xServerView.requestRender();
+    }
+
+    private android.opengl.EGLConfig currentEglConfig(android.opengl.EGLDisplay display, android.opengl.EGLContext context) {
+        int[] id = new int[1];
+        EGL14.eglQueryContext(display, context, EGL14.EGL_CONFIG_ID, id, 0);
+        int[] attribs = {EGL14.EGL_CONFIG_ID, id[0], EGL14.EGL_NONE};
+        android.opengl.EGLConfig[] configs = new android.opengl.EGLConfig[1];
+        int[] count = new int[1];
+        EGL14.eglChooseConfig(display, attribs, 0, configs, 0, 1, count, 0);
+        return count[0] > 0 ? configs[0] : null;
+    }
+
+    private void drawRegionTargets() {
+        if (regionTargets.isEmpty()) return;
+
+        android.opengl.EGLDisplay display = EGL14.eglGetCurrentDisplay();
+        android.opengl.EGLContext context = EGL14.eglGetCurrentContext();
+        android.opengl.EGLSurface master = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW);
+        android.opengl.EGLConfig config = currentEglConfig(display, context);
+        if (config == null) return;
+
+        for (RegionTarget target : regionTargets) {
+            Surface surface = target.surface;
+            if (target.released || surface == null || !surface.isValid()) continue;
+
+            if (target.eglSurface == null) {
+                android.opengl.EGLSurface created = EGL14.eglCreateWindowSurface(display, config, surface, new int[]{EGL14.EGL_NONE}, 0);
+                if (created == null || created == EGL14.EGL_NO_SURFACE) continue;
+                target.eglSurface = created;
+                if (EGL14.eglMakeCurrent(display, created, created, context)) EGL14.eglSwapInterval(display, 0);
+            }
+
+            if (!EGL14.eglMakeCurrent(display, target.eglSurface, target.eglSurface, context)) {
+                EGL14.eglDestroySurface(display, target.eglSurface);
+                target.eglSurface = null;
+                continue;
+            }
+
+            drawRegion(target);
+            EGL14.eglSwapBuffers(display, target.eglSurface);
+        }
+
+        EGL14.eglMakeCurrent(display, master, master, context);
+    }
+
+    private void drawRegion(RegionTarget target) {
+        GLES20.glViewport(0, 0, target.width, target.height);
+        GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+
+        // сдвиг области X-экрана в левый верхний угол поверхности
+        XForm.makeTransform(tmpXForm2, -target.regionX, -target.regionY, 1.0f, 1.0f, 0);
+        renderWindows(target.regionWidth, target.regionHeight);
+        if (cursorVisible) renderCursor(target.regionWidth, target.regionHeight);
+
+        GLES20.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     }
 
     public void toggleFullscreen() {

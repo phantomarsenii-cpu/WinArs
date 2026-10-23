@@ -90,6 +90,7 @@ import com.winlator.xserver.Property;
 import com.winlator.xserver.ScreenInfo;
 import com.winlator.xserver.Window;
 import com.winlator.xserver.WindowManager;
+import com.winlator.xserver.XKeycode;
 import com.winlator.xserver.XLock;
 import com.winlator.xserver.XServer;
 import java.io.File;
@@ -126,6 +127,9 @@ public class WineSession extends ContextWrapper {
         public String className;
         public long handle;
         public boolean iconic;
+        /** положение и размер в координатах X-экрана (корневого окна) */
+        public int x, y, width, height;
+        public boolean dialog;
     }
 
     private XServerView xServerView;
@@ -235,7 +239,7 @@ public class WineSession extends ContextWrapper {
                 }
 
                 // первое окно программы разворачиваем на весь X-экран: он совпадает с моим окном, чёрных полей нет
-                if (!maximizedOnce && ready && preferences.getBoolean("wa_auto_maximize", true)
+                if (!maximizedOnce && ready && preferences.getBoolean("wa_auto_maximize", false)
                         && window.isRenderable() && !window.isDesktopWindow() && !window.getName().isEmpty()) {
                     maximizedOnce = true;
                     final long handle = window.getHandle();
@@ -290,14 +294,11 @@ public class WineSession extends ContextWrapper {
         renderer.setCursorScale(preferences.getFloat("cursor_scale", 1.0f));
         xServer.setRenderer(renderer);
 
-        viewRoot = new FrameLayout(this);
-        viewRoot.addView(xServerView);
 
         touchpadView = new TouchpadView(this, xServer, true);
         // прямое соответствие 1:1: касание/перо = точка на X-экране (без относительного режима и множителя)
         touchpadView.setSensitivity(1.0f);
         touchpadView.setMoveCursorToTouchpoint(true);
-        viewRoot.addView(touchpadView);
 
         // нужен GamepadHandler; на экран не добавляется
         inputControlsView = new InputControlsView(this);
@@ -329,31 +330,82 @@ public class WineSession extends ContextWrapper {
 
     // ---------- окна Wine для панели задач ----------
 
+    private volatile List<WindowInfo> lastWindows = new ArrayList<>();
+    private int focusedXid = -1;
+
     public List<WindowInfo> getActiveWindows() {
         ArrayList<WindowInfo> result = new ArrayList<>();
         if (xServer == null || stopped) return result;
         try (XLock lock = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.DRAWABLE_MANAGER)) {
-            collectWindows(xServer.windowManager.rootWindow, result);
+            collectTopLevel(xServer.windowManager.rootWindow, 0, 0, result);
         }
         catch (Throwable ignored) {}
+        lastWindows = result;
         return result;
     }
 
-    private void collectWindows(Window window, ArrayList<WindowInfo> result) {
-        if (!window.isRenderable()) return;
-        if ((window != xServer.windowManager.rootWindow && !window.isDesktopWindow() && !window.getName().isEmpty()) || window.isSurface()) {
-            WindowInfo info = new WindowInfo();
-            info.id = window.id;
-            String title = window.getName();
-            Window parent = window.getParent();
-            if (title.isEmpty() && parent != null) title = parent.getName();
-            info.title = title;
-            info.className = window.getClassName();
-            info.handle = window.getHandle();
-            info.iconic = window.isIconic();
-            result.add(info);
+    /** Окно программы: показано, не рабочий стол, не крошечное, с заголовком (или достаточно большое). */
+    private boolean isAppWindow(Window window) {
+        if (window.isDesktopWindow() || !window.attributes.isMapped()) return false;
+        if (window.getWidth() < 32 || window.getHeight() < 24) return false;
+        boolean named = !window.getName().isEmpty();
+        return named || (window.getWidth() >= 320 && window.getHeight() >= 200);
+    }
+
+    private void collectTopLevel(Window parent, int parentX, int parentY, ArrayList<WindowInfo> result) {
+        for (Window child : parent.getChildren()) {
+            if (!child.attributes.isMapped()) continue;
+            int cx = parentX + child.getX();
+            int cy = parentY + child.getY();
+            if (isAppWindow(child)) {
+                WindowInfo info = new WindowInfo();
+                info.id = child.id;
+                info.title = child.getName();
+                info.className = child.getClassName();
+                info.handle = child.getHandle();
+                info.iconic = child.isIconic();
+                info.x = cx;
+                info.y = cy;
+                info.width = child.getWidth();
+                info.height = child.getHeight();
+                info.dialog = child.isDialogBox() || child.getTransientFor() != 0;
+                result.add(info);
+            }
+            else collectTopLevel(child, cx, cy, result);
         }
-        for (Window child : window.getChildren()) collectWindows(child, result);
+    }
+
+    private WindowInfo findWindow(int xid) {
+        for (WindowInfo info : lastWindows) if (info.id == xid) return info;
+        return null;
+    }
+
+    /** Окно получило касание: передаём ему фокус Windows и выносим наверх. */
+    public void focusXWindow(int xid) {
+        if (focusedXid == xid) return;
+        WindowInfo info = findWindow(xid);
+        if (info == null) return;
+        focusedXid = xid;
+        winHandler.bringToFront(info.className, info.handle);
+    }
+
+    /** Закрыть программу так же, как Alt+F4 на ПК: приложение само решит, закрываться ли. */
+    public void closeXWindow(int xid) {
+        WindowInfo info = findWindow(xid);
+        if (info == null || xServer == null) return;
+        winHandler.bringToFront(info.className, info.handle);
+        uiHandler.postDelayed(() -> {
+            if (xServer == null || stopped) return;
+            xServer.injectKeyPress(XKeycode.KEY_ALT_L);
+            xServer.injectKeyPress(XKeycode.KEY_F4);
+            xServer.injectKeyRelease(XKeycode.KEY_F4);
+            xServer.injectKeyRelease(XKeycode.KEY_ALT_L);
+        }, 150);
+    }
+
+    /** Клавиатура телефона/USB в активное окно Wine. */
+    public boolean dispatchKey(android.view.KeyEvent event) {
+        return xServer != null && !stopped && xServer.keyboard.onKeyEvent(event);
     }
 
     public void bringToFront(WindowInfo info) {
