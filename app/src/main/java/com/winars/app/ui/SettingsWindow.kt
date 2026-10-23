@@ -136,7 +136,7 @@ fun SettingsContent() {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Разворачивать программу на весь экран Wine", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Switch(st.autoMaximize, { st.setAutoMaximize(it) })
+                Switch(st.autoMaximize, { st.changeAutoMaximize(it) })
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

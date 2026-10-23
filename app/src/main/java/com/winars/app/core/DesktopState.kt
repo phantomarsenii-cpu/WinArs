@@ -49,7 +49,7 @@ class DesktopState(val app: Context) {
     private val corePrefs = app.getSharedPreferences(app.packageName + "_preferences", Context.MODE_PRIVATE)
     var autoMaximize by mutableStateOf(corePrefs.getBoolean("wa_auto_maximize", true))
         private set
-    fun setAutoMaximize(v: Boolean) { autoMaximize = v; corePrefs.edit().putBoolean("wa_auto_maximize", v).apply() }
+    fun changeAutoMaximize(v: Boolean) { autoMaximize = v; corePrefs.edit().putBoolean("wa_auto_maximize", v).apply() }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     val profile: DeviceProfiler.Profile = DeviceProfiler.detect(app)
