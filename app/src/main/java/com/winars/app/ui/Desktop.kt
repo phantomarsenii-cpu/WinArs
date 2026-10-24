@@ -99,18 +99,20 @@ fun DesktopRoot(state: DesktopState, external: Boolean) {
 
     CompositionLocalProvider(LocalDesktop provides state, LocalRootSize provides rootSize) {
         BoxWithConstraints(
-            Modifier.fillMaxSize().background(Color.Black).onSizeChanged { rootSize.value = it }
+            Modifier.fillMaxSize().background(Color.Black).onSizeChanged { rootSize.value = it; if (!external) state.rootPx = it }
         ) {
             val compact = maxWidth < 640.dp
-            val tbHeight = if (landscape) 72.dp else 62.dp
+            val tbHeight = (if (landscape) 72.dp else 62.dp) * (state.taskbarScalePct / 100f)
             val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             val reserve = tbHeight + (if (landscape) 0.dp else 16.dp) + navInset
             val area = DpSize(maxWidth, maxHeight)
 
             WallpaperLayer(state)
-            Box(Modifier.fillMaxSize().pointerInput(Unit) {
-                detectTapGestures { state.selectedId = null; state.startOpen = false; state.menu = null }
-            })
+            // фон рабочего стола: тап снимает выделение, правая кнопка / долгое нажатие — размеры значков и панели
+            Box(Modifier.fillMaxSize().desktopTarget(
+                onTap = { state.selectedId = null; state.startOpen = false; state.menu = null },
+                menu = { sizeMenu(state) }
+            ))
             DesktopIcons(state, reserve)
 
             for (w in state.windows) key(w.id) { WindowHost(w, compact, area, reserve) }
@@ -208,8 +210,9 @@ fun Img(res: Int, size: Dp, modifier: Modifier = Modifier) = Image(painterResour
 private fun DesktopIcons(state: DesktopState, reserve: Dp) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
-        val iconSize = if (landscape) 44.dp else 56.dp
-        val tileWidth = if (landscape) 76.dp else 88.dp
+        val scale = state.iconScalePct / 100f
+        val iconSize = (if (landscape) 44.dp else 56.dp) * scale
+        val tileWidth = maxOf(72.dp, (if (landscape) 76.dp else 88.dp) * scale)
         val tileHeight = iconSize + 62.dp
         val sidePad = 8.dp
         val topPad = 28.dp

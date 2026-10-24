@@ -22,7 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
@@ -60,6 +63,20 @@ fun shortcutMenu(st: DesktopState, sc: Shortcut): List<MenuItem> = listOf(
     },
     MenuItem("Удалить ярлык", Icons.Default.Delete) { st.removeShortcut(sc.id) }
 )
+
+/** Меню фона рабочего стола и панели задач: размеры значков и панели, как «Вид» на ПК. */
+fun sizeMenu(st: DesktopState): List<MenuItem> {
+    fun mark(current: Boolean, text: String) = (if (current) "✓  " else "     ") + text
+    return listOf(
+        MenuItem(mark(st.iconScalePct == 65, "Значки: мелкие"), Icons.Default.GridView) { st.changeIconScale(65) },
+        MenuItem(mark(st.iconScalePct == 85, "Значки: средние"), Icons.Default.GridView) { st.changeIconScale(85) },
+        MenuItem(mark(st.iconScalePct == 115, "Значки: крупные"), Icons.Default.GridView) { st.changeIconScale(115) },
+        MenuItem(mark(st.taskbarScalePct == 65, "Панель задач: малая"), Icons.Default.ViewAgenda) { st.changeTaskbarScale(65) },
+        MenuItem(mark(st.taskbarScalePct == 80, "Панель задач: средняя"), Icons.Default.ViewAgenda) { st.changeTaskbarScale(80) },
+        MenuItem(mark(st.taskbarScalePct == 100, "Панель задач: крупная"), Icons.Default.ViewAgenda) { st.changeTaskbarScale(100) },
+        MenuItem("Параметры", Icons.Default.Settings) { st.openSettings() }
+    )
+}
 
 @Composable
 fun BoxScope.ContextMenuLayer(st: DesktopState) {

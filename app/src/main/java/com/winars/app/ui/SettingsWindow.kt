@@ -82,6 +82,11 @@ fun SettingsContent() {
             }
             Spacer(Modifier.height(4.dp))
             Text("JPG, PNG или MP4 (живые обои). Смена — кроссфейд 300 мс.", color = Fluent.TextDim, fontSize = 11.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("Размер значков: ${st.iconScalePct}%", color = Color.White, fontSize = 13.sp)
+            Slider(st.iconScalePct.toFloat(), { st.changeIconScale((it / 5).toInt() * 5) }, valueRange = 50f..150f, steps = 19)
+            Text("Размер панели задач: ${st.taskbarScalePct}%", color = Color.White, fontSize = 13.sp)
+            Slider(st.taskbarScalePct.toFloat(), { st.changeTaskbarScale((it / 5).toInt() * 5) }, valueRange = 50f..150f, steps = 19)
         }
 
         Card("Производительность") {

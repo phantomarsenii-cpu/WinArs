@@ -25,12 +25,13 @@ fun WineAppContent(w: AppWindow.WineApp) {
     val st = LocalDesktop.current
     val session = st.wine.session ?: return
     val info = st.wine.xWindows.firstOrNull { it.id == w.xid } ?: return
-    val region = st.wineRegion(info)
+    val region = st.wineRegion(info, w.maximizedByUser)
     val ratio = region[2].toFloat() / region[3].toFloat()
 
     Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         AndroidView(
-            modifier = Modifier.aspectRatio(ratio),
+            // развёрнуто — заполняем окно целиком; иначе сохраняем пропорции программы
+            modifier = if (w.maximizedByUser) Modifier.fillMaxSize() else Modifier.aspectRatio(ratio),
             factory = { ctx -> WineWindowView(ctx, session, w.xid) },
             update = { it.setRegion(region[0], region[1], region[2], region[3]) }
         )

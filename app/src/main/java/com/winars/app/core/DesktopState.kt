@@ -37,6 +37,8 @@ sealed class AppWindow {
     /** Одна программа Wine = одно окно WinArs. xid — окно в X-сервере. */
     class WineApp(val xid: Int, initialTitle: String) : AppWindow() {
         override var title by mutableStateOf(initialTitle.ifBlank { "Wine" })
+        /** пользователь развернул окно: Wine-окно занимает весь экран Wine, WinArs-окно — всю рабочую область */
+        var maximizedByUser by mutableStateOf(false)
     }
 
     companion object { private val counter = AtomicLong(0) }
@@ -52,6 +54,35 @@ class DesktopState(val app: Context) {
     private val corePrefs = app.getSharedPreferences(app.packageName + "_preferences", Context.MODE_PRIVATE)
     var autoMaximize by mutableStateOf(corePrefs.getBoolean("wa_auto_maximize", false))
         private set
+    // ---- размеры значков и панели задач (проценты), настраиваются из контекстного меню ----
+    var iconScalePct by mutableIntStateOf(prefs.getInt("icon_scale", 85))
+        private set
+    var taskbarScalePct by mutableIntStateOf(prefs.getInt("taskbar_scale", 80))
+        private set
+    fun changeIconScale(pct: Int) { iconScalePct = pct.coerceIn(50, 150); prefs.edit().putInt("icon_scale", iconScalePct).apply() }
+    fun changeTaskbarScale(pct: Int) { taskbarScalePct = pct.coerceIn(50, 150); prefs.edit().putInt("taskbar_scale", taskbarScalePct).apply() }
+
+    /** размер корня рабочего стола на телефоне/мониторе (для выбора размера X-экрана) */
+    var rootPx = androidx.compose.ui.unit.IntSize.Zero
+
+    /**
+     * Размер X-экрана Wine = размер развёрнутого окна WinArs (рабочая область минус моя шапка),
+     * чтобы развёрнутая программа занимала всё окно без полей. На узких экранах — 1280x720.
+     */
+    fun wineScreenSize(): String {
+        val d = app.resources.displayMetrics.density
+        val w = rootPx.width
+        val taskbarDp = (if (w > rootPx.height) 72f else 70f) * taskbarScalePct / 100f
+        val h = rootPx.height - ((taskbarDp + 40f) * d).toInt()
+        if (w <= 0 || h <= 0 || w < h * 1.2f) return "1280x720"
+        var sw = w
+        var sh = h
+        if (sw > 1920) { sh = sh * 1920 / sw; sw = 1920 }
+        sw = sw / 2 * 2
+        sh = (sh / 2 * 2).coerceAtLeast(480)
+        return "${sw}x${sh}"
+    }
+
     /** Сколько пикселей сверху отрезать у окна Wine (его собственный заголовок). 0 = показывать целиком. */
     var wineCropTop by mutableIntStateOf(prefs.getInt("wine_crop_top", 20))
         private set
@@ -66,10 +97,11 @@ class DesktopState(val app: Context) {
      * Область окна программы БЕЗ его собственной рамки Wine: [x, y, ширина, высота] в координатах X-экрана.
      * Окна во весь экран (игры) не обрезаются.
      */
-    fun wineRegion(info: WineSession.WindowInfo): IntArray {
+    fun wineRegion(info: WineSession.WindowInfo, forceCrop: Boolean = false): IntArray {
         val screen = wine.session?.screenSizeInfo
         val fullscreen = screen != null && info.width >= screen.width * 0.95f && info.height >= screen.height * 0.95f
-        if (fullscreen) return intArrayOf(info.x, info.y, info.width, info.height)
+        // игра во весь экран — без обрезки; развёрнутое пользователем окно имеет заголовок Wine — обрезаем
+        if (fullscreen && !forceCrop) return intArrayOf(info.x, info.y, info.width, info.height)
         val top = wineCropTop.coerceIn(0, info.height / 2)
         val side = wineCropSide.coerceIn(0, info.width / 4)
         return intArrayOf(
@@ -263,6 +295,7 @@ class DesktopState(val app: Context) {
         wine.onSessionExit = { onWineExit() }
         wine.onGuestExit = { windows.removeAll { it is AppWindow.WineApp } }
         wine.onError = { toast(it) }
+        wine.screenSizeProvider = { wineScreenSize() }
         refreshBackdrop()
         importWineShortcuts()
     }

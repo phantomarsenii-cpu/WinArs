@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.FilterNone
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -73,7 +74,7 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
             val info = st.wine.xWindows.firstOrNull { it.id == w.xid }
             val d = LocalDensity.current.density
             if (info != null) {
-                val r = st.wineRegion(info)
+                val r = st.wineRegion(info, w.maximizedByUser)
                 DpSize((r[2] / d).dp, (r[3] / d).dp + 40.dp)
             } else DpSize(640.dp, 480.dp)
         }
@@ -85,7 +86,7 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
         else -> R.drawable.wa_icon_launcher
     }
     // окно программы Wine всегда плавающее и точно по размеру программы (без чёрных полей)
-    val full = !dialog && w !is AppWindow.WineApp && (compact || maximized)
+    val full = !dialog && ((compact && w !is AppWindow.WineApp) || maximized)
     val width: Dp
     val height: Dp
     if (w is AppWindow.WineApp) {
@@ -100,7 +101,8 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
     }
 
     val place = if (full) {
-        Modifier.align(Alignment.TopStart).fillMaxSize().padding(start = 6.dp, end = 6.dp, top = 28.dp, bottom = reserve)
+        // развёрнутое окно занимает всю рабочую область, как на ПК (на ландшафте без верхнего отступа)
+        Modifier.align(Alignment.TopStart).fillMaxSize().padding(start = 0.dp, end = 0.dp, top = if (area.width > area.height) 0.dp else 28.dp, bottom = reserve)
     } else {
         Modifier.align(Alignment.Center)
             .padding(bottom = reserve / 2)
@@ -109,13 +111,16 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
     }
 
     WindowFrame(
-        title = w.title, icon = icon, dialog = dialog, full = full,
+        title = w.title, icon = icon, dialog = dialog, full = full, maximized = maximized || (full && w !is AppWindow.WineApp),
         onDrag = { if (!full) offset += it },
         onMinimize = { w.minimized = true },
         onMaximize = {
             maximized = !maximized
-            // для программы Wine «развернуть» = развернуть её средствами Wine; окно WinArs подстроится под новый размер
-            if (w is AppWindow.WineApp) st.wine.session?.showXWindow(w.xid, if (maximized) 3 else 9)
+            // для программы Wine «развернуть» = развернуть её средствами Wine на весь X-экран (он равен моему окну)
+            if (w is AppWindow.WineApp) {
+                w.maximizedByUser = maximized
+                st.wine.session?.showXWindow(w.xid, if (maximized) 3 else 9)
+            }
         },
         onClose = { st.close(w) },
         modifier = place
@@ -151,6 +156,7 @@ private fun WindowFrame(
     icon: Int,
     dialog: Boolean,
     full: Boolean,
+    maximized: Boolean,
     onDrag: (Offset) -> Unit,
     onMinimize: () -> Unit,
     onMaximize: () -> Unit,
@@ -158,7 +164,7 @@ private fun WindowFrame(
     modifier: Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(if (full) 0.dp else 8.dp)
     MicaSurface(modifier.shadow(if (full) 0.dp else 24.dp, shape), shape) {
         Column(Modifier.fillMaxSize()) {
             Row(
@@ -173,7 +179,7 @@ private fun WindowFrame(
                 Text(title, color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (!dialog) {
                     CaptionButton(Icons.Default.Remove, onMinimize)
-                    CaptionButton(Icons.Default.CropSquare, onMaximize)
+                    CaptionButton(if (maximized) Icons.Default.FilterNone else Icons.Default.CropSquare, onMaximize)
                 }
                 CaptionButton(Icons.Default.Close, onClose, danger = true)
             }

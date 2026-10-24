@@ -62,6 +62,7 @@ class WinlatorBackend(private val app: Context) : WineBackend {
         private set
     var onGuestExit: () -> Unit = {}
     var onWindowsRefreshed: () -> Unit = {}
+    var screenSizeProvider: () -> String? = { null }
 
     var onSessionReady: () -> Unit = {}
     var onSessionExit: () -> Unit = {}
@@ -101,6 +102,9 @@ class WinlatorBackend(private val app: Context) : WineBackend {
         }
 
         // 4. новая сессия: XEnvironment + Wine без Activity
+        screenSizeProvider()?.let { size ->
+            if (container.screenSize != size) { container.screenSize = size; container.saveData() }
+        }
         val s = WineSession(app)
         session = s
         sessionReady = false

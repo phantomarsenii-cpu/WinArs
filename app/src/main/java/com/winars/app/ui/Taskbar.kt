@@ -52,34 +52,36 @@ import java.util.Locale
  */
 @Composable
 fun BoxScope.Taskbar(st: DesktopState, landscape: Boolean) {
-    val h = if (landscape) 72.dp else 62.dp
+    val s = st.taskbarScalePct / 100f
+    val h = (if (landscape) 72.dp else 62.dp) * s
     Box(
         Modifier.align(Alignment.BottomCenter)
             .navigationBarsPadding()
             .then(if (landscape) Modifier else Modifier.padding(8.dp))
             .fillMaxWidth().height(h)
     ) {
-        MicaSurface(Modifier.fillMaxSize(), if (landscape) RectangleShape else RoundedCornerShape(16.dp)) {
+        // правая кнопка / долгое нажатие по панели — размеры значков и панели
+        MicaSurface(Modifier.fillMaxSize().desktopTarget(menu = { sizeMenu(st) }), if (landscape) RectangleShape else RoundedCornerShape(16.dp)) {
             Row(
                 Modifier.align(Alignment.Center),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TaskbarButton(false, { st.startOpen = !st.startOpen }) { Img(R.drawable.wa_icon_launcher, 34.dp) }
+                TaskbarButton(false, { st.startOpen = !st.startOpen }) { Img(R.drawable.wa_icon_launcher, (34 * s).dp) }
                 TaskbarButton(st.windows.any { it is AppWindow.Explorer }, { toggle(st, { it is AppWindow.Explorer }) { st.openExplorer() } }) {
-                    Img(R.drawable.wa_icon_explorer, 32.dp)
+                    Img(R.drawable.wa_icon_explorer, (32 * s).dp)
                 }
                 TaskbarButton(st.windows.any { it is AppWindow.Settings }, { toggle(st, { it is AppWindow.Settings }) { st.openSettings() } }) {
-                    Img(R.drawable.wa_icon_settings, 32.dp)
+                    Img(R.drawable.wa_icon_settings, (32 * s).dp)
                 }
                 // каждая программа Wine — своя кнопка (её окно WinArs): клик сворачивает / показывает
                 st.windows.filterIsInstance<AppWindow.WineApp>().forEach { wa ->
                     TaskbarButton(!wa.minimized, { toggle(st, { it === wa }) { st.focus(wa) } }) {
-                        Img(R.drawable.wa_generic_exe, 30.dp)
+                        Img(R.drawable.wa_generic_exe, (30 * s).dp)
                     }
                 }
                 st.shortcuts.filter { it.onTaskbar }.forEach { sc ->
-                    TaskbarButton(false, { st.launch(sc) }, menu = { shortcutMenu(st, sc) }) { ShortcutIcon(sc, 32.dp) }
+                    TaskbarButton(false, { st.launch(sc) }, menu = { shortcutMenu(st, sc) }) { ShortcutIcon(sc, (32 * s).dp) }
                 }
             }
             if (landscape) Tray(Modifier.align(Alignment.CenterEnd).padding(end = 16.dp))
@@ -107,7 +109,7 @@ private fun TaskbarButton(
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     Box(
-        Modifier.size(48.dp).clip(RoundedCornerShape(6.dp))
+        Modifier.size(48.dp * (LocalDesktop.current.taskbarScalePct / 100f)).clip(RoundedCornerShape(6.dp))
             .background(if (hovered) Fluent.Hover else Color.Transparent)
             .hoverable(hover)
             .desktopTarget(onTap = onClick, menu = menu),
