@@ -403,6 +403,12 @@ public class WineSession extends ContextWrapper {
         }, 150);
     }
 
+    /** Развернуть/вернуть окно программы средствами Wine (SW_MAXIMIZE = 3, SW_RESTORE = 9). */
+    public void showXWindow(int xid, int command) {
+        WindowInfo info = findWindow(xid);
+        if (info != null) winHandler.showWindow(info.handle, command);
+    }
+
     /** Клавиатура телефона/USB в активное окно Wine. */
     public boolean dispatchKey(android.view.KeyEvent event) {
         return xServer != null && !stopped && xServer.keyboard.onKeyEvent(event);

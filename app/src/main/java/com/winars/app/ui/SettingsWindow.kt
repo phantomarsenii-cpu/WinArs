@@ -144,6 +144,11 @@ fun SettingsContent() {
                 st.wineCropTop.toFloat(), { st.changeWineCropTop(it.toInt()) },
                 valueRange = 0f..48f, steps = 47
             )
+            Text("Обрезать рамку Wine по бокам и снизу: ${st.wineCropSide} px", color = Color.White, fontSize = 13.sp)
+            Slider(
+                st.wineCropSide.toFloat(), { st.changeWineCropSide(it.toInt()) },
+                valueRange = 0f..12f, steps = 11
+            )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FluentButton("Обновить программы", { st.importWineShortcuts(manual = true) }, primary = true)

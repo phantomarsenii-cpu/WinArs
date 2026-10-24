@@ -25,15 +25,14 @@ fun WineAppContent(w: AppWindow.WineApp) {
     val st = LocalDesktop.current
     val session = st.wine.session ?: return
     val info = st.wine.xWindows.firstOrNull { it.id == w.xid } ?: return
-    val crop = st.wineCropTop.coerceIn(0, (info.height - 24).coerceAtLeast(0))
-    val height = (info.height - crop).coerceAtLeast(1)
-    val ratio = info.width.toFloat() / height.toFloat()
+    val region = st.wineRegion(info)
+    val ratio = region[2].toFloat() / region[3].toFloat()
 
     Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         AndroidView(
             modifier = Modifier.aspectRatio(ratio),
             factory = { ctx -> WineWindowView(ctx, session, w.xid) },
-            update = { it.setRegion(info.x, info.y + crop, info.width, height) }
+            update = { it.setRegion(region[0], region[1], region[2], region[3]) }
         )
     }
 }

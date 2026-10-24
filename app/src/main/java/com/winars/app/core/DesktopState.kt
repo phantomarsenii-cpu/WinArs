@@ -3,6 +3,7 @@ package com.winars.app.core
 import android.content.Context
 import android.net.Uri
 import android.view.Display
+import com.winlator.WineSession
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -52,9 +53,30 @@ class DesktopState(val app: Context) {
     var autoMaximize by mutableStateOf(corePrefs.getBoolean("wa_auto_maximize", false))
         private set
     /** Сколько пикселей сверху отрезать у окна Wine (его собственный заголовок). 0 = показывать целиком. */
-    var wineCropTop by mutableIntStateOf(prefs.getInt("wine_crop_top", 0))
+    var wineCropTop by mutableIntStateOf(prefs.getInt("wine_crop_top", 20))
         private set
     fun changeWineCropTop(v: Int) { wineCropTop = v; prefs.edit().putInt("wine_crop_top", v).apply() }
+
+    /** Сколько пикселей отрезать слева, справа и снизу (рамка окна Wine). */
+    var wineCropSide by mutableIntStateOf(prefs.getInt("wine_crop_side", 2))
+        private set
+    fun changeWineCropSide(v: Int) { wineCropSide = v; prefs.edit().putInt("wine_crop_side", v).apply() }
+
+    /**
+     * Область окна программы БЕЗ его собственной рамки Wine: [x, y, ширина, высота] в координатах X-экрана.
+     * Окна во весь экран (игры) не обрезаются.
+     */
+    fun wineRegion(info: WineSession.WindowInfo): IntArray {
+        val screen = wine.session?.screenSizeInfo
+        val fullscreen = screen != null && info.width >= screen.width * 0.95f && info.height >= screen.height * 0.95f
+        if (fullscreen) return intArrayOf(info.x, info.y, info.width, info.height)
+        val top = wineCropTop.coerceIn(0, info.height / 2)
+        val side = wineCropSide.coerceIn(0, info.width / 4)
+        return intArrayOf(
+            info.x + side, info.y + top,
+            (info.width - 2 * side).coerceAtLeast(1), (info.height - top - side).coerceAtLeast(1)
+        )
+    }
 
     /** Ячейки иконок рабочего стола (перетаскивание): id -> (столбец, строка). Хранится в prefs. */
     val iconCells = androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.unit.IntOffset>().apply {

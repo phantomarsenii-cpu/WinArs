@@ -72,7 +72,10 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
             // 1 пиксель окна Wine = 1 физический пиксель экрана, плюс моя шапка 40dp
             val info = st.wine.xWindows.firstOrNull { it.id == w.xid }
             val d = LocalDensity.current.density
-            if (info != null) DpSize((info.width / d).dp, ((info.height - st.wineCropTop) / d).dp + 40.dp) else DpSize(640.dp, 480.dp)
+            if (info != null) {
+                val r = st.wineRegion(info)
+                DpSize((r[2] / d).dp, (r[3] / d).dp + 40.dp)
+            } else DpSize(640.dp, 480.dp)
         }
     }
     val icon = when (w) {
@@ -81,9 +84,20 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
         is AppWindow.WineApp -> R.drawable.wa_generic_exe
         else -> R.drawable.wa_icon_launcher
     }
-    val full = !dialog && (compact || maximized)
-    val width = minOf(pref.width, area.width - 16.dp)
-    val height = minOf(pref.height, area.height - reserve - 40.dp)
+    // окно программы Wine всегда плавающее и точно по размеру программы (без чёрных полей)
+    val full = !dialog && w !is AppWindow.WineApp && (compact || maximized)
+    val width: Dp
+    val height: Dp
+    if (w is AppWindow.WineApp) {
+        val contentW = pref.width
+        val contentH = pref.height - 40.dp
+        val k = minOf(1f, (area.width - 16.dp) / contentW, (area.height - reserve - 80.dp) / contentH)
+        width = contentW * k
+        height = contentH * k + 40.dp
+    } else {
+        width = minOf(pref.width, area.width - 16.dp)
+        height = minOf(pref.height, area.height - reserve - 40.dp)
+    }
 
     val place = if (full) {
         Modifier.align(Alignment.TopStart).fillMaxSize().padding(start = 6.dp, end = 6.dp, top = 28.dp, bottom = reserve)
@@ -98,7 +112,11 @@ fun BoxScope.WindowHost(w: AppWindow, compact: Boolean, area: DpSize, reserve: D
         title = w.title, icon = icon, dialog = dialog, full = full,
         onDrag = { if (!full) offset += it },
         onMinimize = { w.minimized = true },
-        onMaximize = { maximized = !maximized },
+        onMaximize = {
+            maximized = !maximized
+            // для программы Wine «развернуть» = развернуть её средствами Wine; окно WinArs подстроится под новый размер
+            if (w is AppWindow.WineApp) st.wine.session?.showXWindow(w.xid, if (maximized) 3 else 9)
+        },
         onClose = { st.close(w) },
         modifier = place
             // свёрнутое окно остаётся в композиции (состояние не теряется), но не занимает места и не принимает ввод
